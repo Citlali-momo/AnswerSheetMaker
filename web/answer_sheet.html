@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>A3 数学答题卡生成器</title>
+<style>
+  html, body { margin:0; padding:0; background:#f4f4f4; }
+  body { font: 13px/1.6 "Microsoft YaHei", "SimSun", sans-serif; color:#222; }
+
+  #panel {
+    position: fixed; left:0; top:0; bottom:0; width: 330px;
+    overflow-y: auto; overflow-x: hidden;
+    background:#fff; border-right: 1px solid #e2d2dd;
+    padding: 12px 12px 40px 12px;
+  }
+  #panel h1 { font-size: 16px; margin: 4px 0 2px 0; color:#d63384; }
+  #panel .sub { font-size: 12px; color:#888; margin-bottom: 10px; }
+
+  fieldset { border:1px solid #e7d7e0; margin: 0 0 10px 0; padding: 6px 10px 10px 10px; }
+  legend { font-size: 12px; color:#d63384; padding: 0 4px; font-weight: bold; }
+  label { display: block; margin: 5px 0; font-size: 12.5px; }
+  label.inline { display: inline-block; margin-right: 10px; }
+  input[type="text"], select {
+    width: 100%; box-sizing: border-box; padding: 3px 4px;
+    border: 1px solid #cfc2c9; font: 12.5px "Microsoft YaHei", sans-serif; color:#222;
+  }
+  input[type="text"].short { width: 54px; display:inline-block; }
+  input[type="file"] { font-size: 12px; }
+  button {
+    font: 12.5px "Microsoft YaHei", sans-serif; padding: 5px 10px; cursor: pointer;
+    border: 1px solid #d63384; background:#fff; color:#c2185b; border-radius: 3px;
+  }
+  button:hover { background:#fdeef5; }
+  button.primary { background:#d63384; color:#fff; }
+  button.primary:hover { background:#c2185b; }
+  button.wide { width: 100%; margin-top: 6px; padding: 8px; font-size: 14px; }
+  .swatch { display:inline-block; width: 22px; height: 22px; margin-right: 5px;
+            border:1px solid #bbb; cursor: pointer; vertical-align: middle; }
+  .row { margin: 6px 0; }
+  .hint { font-size: 11.5px; color:#8a8a8a; line-height: 1.5; }
+  .imgrow { border-top: 1px dotted #e0d6dc; padding-top: 6px; margin-top: 6px; }
+  .imgrow .name { font-size: 12px; color:#333; }
+  .imgrow .file { font-size: 11.5px; color:#999; word-break: break-all; }
+  .score-item { display: inline-block; margin-right: 8px; }
+  #status { position: fixed; right: 16px; bottom: 14px; z-index: 10; padding: 8px 14px;
+            background:#333; color:#fff; border-radius: 4px; font-size: 13px; display:none; }
+
+  #pages { margin-left: 342px; padding: 16px 16px 60px 16px; }
+  #pages .sheet { background:#fff; margin: 0 auto 18px auto; max-width: 900px;
+                  box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+  #pages canvas { display:block; width: 100%; height: auto; }
+
+  #printArea { display: none; }
+
+  @media print {
+    #panel, #pages, #status { display: none !important; }
+    html, body { background:#fff; margin:0; padding:0; }
+    #printArea { display: block !important; }
+    #printArea canvas { display:block; width: 420mm; height: 297mm; page-break-after: always; }
+    @page { size: 420mm 297mm; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>数学答题卡生成器</h1>
+  <div class="sub">A3 横向 · 两页 · 打开即用</div>
+
+  <fieldset>
+    <legend>一、标题</legend>
+    <label>大标题
+      <input id="tTitle" type="text" value="2026年普通高等学校招生全国统一考试">
+    </label>
+    <label>副标题
+      <input id="tSubtitle" type="text" value="数学答题卡">
+    </label>
+    <label>页脚文字
+      <input id="tFooter" type="text" value="数学答题卡第{page}面（共{pages}面）">
+    </label>
+    <div class="hint">标题太长会自动缩小字号，再放不下会拆成两行。</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>二、选择题方式</legend>
+    <label><input type="radio" name="mode" value="bubble" id="mBubble" checked> 机读涂卡（A/B/C/D 涂点）</label>
+    <label><input type="radio" name="mode" value="table" id="mTable"> 填写答案（表格）</label>
+    <div class="row">
+      <span>单选题数</span> <input id="nSingle" class="short" type="text" value="8">
+      <span style="margin-left:8px">多选题数</span> <input id="nMulti" class="short" type="text" value="3">
+    </div>
+    <div class="hint">表格模式下，多选题格子宽度是单选题的 2 倍。</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>三、配色</legend>
+    <label class="inline"><input type="radio" name="color" value="color" id="cColor" checked> 彩色</label>
+    <label class="inline"><input type="radio" name="color" value="bw" id="cBw"> 黑白</label>
+    <div class="row">
+      <span class="swatch" data-rgb="255,50,165" style="background:rgb(255,50,165)" title="粉色"></span>
+      <span class="swatch" data-rgb="255,0,0" style="background:rgb(255,0,0)" title="红色"></span>
+      <span class="swatch" data-rgb="0,102,204" style="background:rgb(0,102,204)" title="蓝色"></span>
+      <span class="swatch" data-rgb="0,128,96" style="background:rgb(0,128,96)" title="绿色"></span>
+      <span class="swatch" data-rgb="0,0,0" style="background:rgb(0,0,0)" title="黑色"></span>
+    </div>
+    <label>主色（RGB）<input id="tPrimary" type="text" value="255,50,165"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>四、解答题分值</legend>
+    <div id="scoreRow"></div>
+    <div class="hint">用于题号后面的括号，例如「15.（13分）」。</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>五、答题区插图</legend>
+    <div class="hint">图片贴在答题区域右上角，自动等比缩放，不会压出边框。宽度留空则用默认 4.8cm。</div>
+    <div id="imgRows"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>六、输出</legend>
+    <label>清晰度
+      <select id="selDpi">
+        <option value="150">150 dpi（最快，很老的电脑用）</option>
+        <option value="200" selected>200 dpi（推荐，老电脑也能跑）</option>
+        <option value="300">300 dpi（最清晰，需要内存大一些）</option>
+      </select>
+    </label>
+    <button id="btnPdf" class="primary wide">生成 PDF 文件</button>
+    <button id="btnPng" class="wide">另存为图片（PDF 打不开时用）</button>
+    <button id="btnPrint" class="wide">直接打印（A3）</button>
+    <button id="btnReset" class="wide">恢复默认设置</button>
+    <div class="hint" style="margin-top:8px">
+      打印时请选 A3、横向、缩放 100%（实际大小），不要选「适合纸张」。
+    </div>
+  </fieldset>
+</div>
+
+<div id="pages">
+  <div class="sheet"><canvas id="c1"></canvas></div>
+  <div class="sheet"><canvas id="c2"></canvas></div>
+</div>
+
+<div id="printArea"></div>
+<div id="status"></div>
+<pre id="selftest" style="display:none"></pre>
+
+<script>
+/*==SCRIPT-START==*/
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------
+   *  基本常量（单位：cm，坐标系与原 TikZ 文件一致：原点在绘图区左下角）
+   * ------------------------------------------------------------------ */
+  var PT2CM = 2.54 / 72;
+  var PAGE = { W: 42, H: 29.7, LM: 1.4, BM: 0.75, DW: 39.2, DH: 28.25,
+               COLW: 12.9, COLX: [0, 13.2, 26.4] };
+
+  // 题目版面（TikZ 坐标）
+  var BUBBLE_H = 2.70;
+  var T_PAD = 0.12, T_GROUP = 0.40, T_HDR = 0.48, T_ANS = 0.92, T_GAP = 0.18;
+  var NOTE_LINE = 1.55;
+
+  function X(x) { return PAGE.LM + x; }          // TikZ x -> 页面 x
+  function Y(y) { return PAGE.H - (PAGE.BM + y); } // TikZ y -> 画布 y
+  function YA(y) { return PAGE.H - y; }          // 页面绝对 y -> 画布 y
+
+  function rgbStr(a) {
+    return 'rgb(' + (a[0] | 0) + ',' + (a[1] | 0) + ',' + (a[2] | 0) + ')';
+  }
+
+  function parseColor(v) {
+    var s = (v === null || v === undefined) ? '' : String(v);
+    s = s.replace(/^\s+|\s+$/g, '');
+    if (s.charAt(0) === '#') { s = s.substring(1); }
+    if (s.indexOf(',') >= 0) {
+      var p = s.split(',');
+      var a = [parseInt(p[0], 10) || 0, parseInt(p[1], 10) || 0, parseInt(p[2], 10) || 0];
+      return a;
+    }
+    if (s.length === 6) {
+      return [parseInt(s.substr(0, 2), 16) || 0,
+              parseInt(s.substr(2, 2), 16) || 0,
+              parseInt(s.substr(4, 2), 16) || 0];
+    }
+    return [255, 50, 165];
+  }
+
+  var NON_BREAK_START = '，。、；：？！）】》”：’%，．';
+
+  /* ------------------------------------------------------------------
+   *  Sheet：一页答题卡
+   * ------------------------------------------------------------------ */
+  function Sheet(cfg, pageNo, scale) {
+    this.cfg = cfg;
+    this.pageNo = pageNo;
+    this.totalPages = 2;
+    this.scale = scale;
+
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(PAGE.W * scale);
+    cv.height = Math.round(PAGE.H * scale);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, PAGE.W, PAGE.H);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+
+    this.canvas = cv;
+    this.ctx = ctx;
+    this.black = '#000000';
+    this.gray = '#595959';
+    this.primary = (cfg.colorMode === 'bw') ? '#000000' : rgbStr(cfg.primary);
+  }
+
+  Sheet.prototype.fontStr = function (sizePt, bold, mul) {
+    var k = mul || 1;
+    var size = (sizePt * PT2CM * k).toFixed(4);
+    var family = bold
+      ? '"SimHei","Microsoft YaHei","Arial",sans-serif'
+      : '"SimSun","宋体","Times New Roman",serif';
+    return (bold ? 'bold ' : '') + size + 'px ' + family;
+  };
+
+  Sheet.prototype.setFont = function (sizePt, bold) {
+    this.ctx.font = this.fontStr(sizePt, bold, 1);
+  };
+
+  // 量字宽：在单位变换下量 100 倍字号再折算，避免小字号被取整
+  Sheet.prototype.measure = function (s, sizePt, bold) {
+    var c = this.ctx;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.font = this.fontStr(sizePt, bold, 100);
+    var w = c.measureText(String(s)).width / 100;
+    c.restore();
+    return w;
+  };
+
+  Sheet.prototype.text = function (x, y, str, sizePt, bold, color, ha, va) {
+    if (str === null || str === undefined || String(str) === '') { return; }
+    var c = this.ctx;
+    this.setFont(sizePt, bold);
+    c.fillStyle = color || this.black;
+    c.textAlign = (ha === 'left') ? 'left' : ((ha === 'right') ? 'right' : 'center');
+    c.textBaseline = (va === 'top') ? 'top' : ((va === 'bottom') ? 'bottom' : 'middle');
+    c.fillText(String(str), X(x), Y(y));
+  };
+
+  // 页面绝对坐标的文字（用于页脚）
+  Sheet.prototype.textAbs = function (x, y, str, sizePt, bold, color) {
+    var c = this.ctx;
+    this.setFont(sizePt, bold);
+    c.fillStyle = color || this.black;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(String(str), x, YA(y));
+  };
+
+  Sheet.prototype.line = function (pts, color, widthPt) {
+    var c = this.ctx;
+    c.beginPath();
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (i === 0) { c.moveTo(X(p[0]), Y(p[1])); }
+      else { c.lineTo(X(p[0]), Y(p[1])); }
+    }
+    c.strokeStyle = color || this.black;
+    c.lineWidth = (widthPt || 0.8) * PT2CM;
+    c.stroke();
+  };
+
+  // 矩形：x, yBottom, w, h（TikZ 坐标）
+  Sheet.prototype.rect = function (x, yBottom, w, h, color, widthPt, fill) {
+    var c = this.ctx;
+    c.beginPath();
+    c.rect(X(x), Y(yBottom + h), w, h);
+    if (fill) { c.fillStyle = fill; c.fill(); }
+    if (color !== null && color !== undefined) {
+      c.strokeStyle = color;
+      c.lineWidth = (widthPt || 0.8) * PT2CM;
+      c.stroke();
+    }
+  };
+
+  Sheet.prototype.rectAbs = function (x, yBottom, w, h, fill) {
+    var c = this.ctx;
+    c.beginPath();
+    c.rect(x, YA(yBottom + h), w, h);
+    c.fillStyle = fill;
+    c.fill();
+  };
+
+  // 虚线框（手工画，兼容老浏览器）
+  Sheet.prototype.dashRect = function (x, yBottom, w, h, color, widthPt, on, off) {
+    var c = this.ctx;
+    c.beginPath();
+    var x0 = X(x), x1 = X(x + w), yb = Y(yBottom), yt = Y(yBottom + h);
+    var phase = true;
+    phase = dashSeg(c, x0, yb, x1, yb, on, off, phase);
+    phase = dashSeg(c, x1, yb, x1, yt, on, off, phase);
+    phase = dashSeg(c, x1, yt, x0, yt, on, off, phase);
+    phase = dashSeg(c, x0, yt, x0, yb, on, off, phase);
+    c.strokeStyle = color || this.black;
+    c.lineWidth = (widthPt || 0.8) * PT2CM;
+    c.stroke();
+  };
+
+  function dashSeg(c, x0, y0, x1, y1, on, off, phase) {
+    var dx = x1 - x0, dy = y1 - y0;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len <= 0) { return phase; }
+    var ux = dx / len, uy = dy / len;
+    var t = 0;
+    while (t < len) {
+      var seg = phase ? on : off;
+      var e = Math.min(len, t + seg);
+      if (phase) {
+        c.moveTo(x0 + ux * t, y0 + uy * t);
+        c.lineTo(x0 + ux * e, y0 + uy * e);
+      }
+      t = e;
+      phase = !phase;
+    }
+    return phase;
+  }
+
+  Sheet.prototype.rrect = function (x, yBottom, w, h, r, color, widthPt) {
+    var c = this.ctx;
+    var l = X(x), t = Y(yBottom + h), rr = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(l + rr, t);
+    c.lineTo(l + w - rr, t);
+    c.quadraticCurveTo(l + w, t, l + w, t + rr);
+    c.lineTo(l + w, t + h - rr);
+    c.quadraticCurveTo(l + w, t + h, l + w - rr, t + h);
+    c.lineTo(l + rr, t + h);
+    c.quadraticCurveTo(l, t + h, l, t + h - rr);
+    c.lineTo(l, t + rr);
+    c.quadraticCurveTo(l, t, l + rr, t);
+    c.closePath();
+    c.strokeStyle = color || this.black;
+    c.lineWidth = (widthPt || 1) * PT2CM;
+    c.stroke();
+  };
+
+  /* ------------------------- 折行 ------------------------- */
+  Sheet.prototype.wrapHanging = function (text, sizePt, maxW, firstW, indent, bold) {
+    var out = [], cur = '', limit = firstW, i, ch, w;
+    for (i = 0; i < text.length; i++) {
+      ch = text.charAt(i);
+      if (cur && this.measure(cur + ch, sizePt, bold) > limit) {
+        if (NON_BREAK_START.indexOf(ch) >= 0 && cur.length > 1) {
+          out.push(cur + ch);
+          cur = '';
+          limit = maxW - indent;
+          continue;
+        }
+        out.push(cur);
+        cur = (ch === ' ') ? '' : ch;
+        limit = maxW - indent;
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur) { out.push(cur); }
+    if (!out.length) { out.push(''); }
+    return out;
+  };
+
+  Sheet.prototype.wrap = function (text, sizePt, maxW, bold) {
+    return this.wrapHanging(text, sizePt, maxW, maxW, 0, bold);
+  };
+
+  /* ------------------------- 页眉 ------------------------- */
+  Sheet.prototype.fitSize = function (s, sizes, bold, maxW) {
+    for (var i = 0; i < sizes.length; i++) {
+      if (this.measure(s, sizes[i], bold) <= maxW) { return sizes[i]; }
+    }
+    return sizes[sizes.length - 1];
+  };
+
+  Sheet.prototype.drawTitles = function () {
+    var cfg = this.cfg;
+    var cx = PAGE.COLW / 2;
+    var maxW = 12.40;
+    var title = cfg.title;
+    var size = this.fitSize(title, [16, 15.5, 15, 14.5, 14, 13.5, 13, 12.5, 12, 11.5, 11, 10.5],
+                            true, maxW);
+    if (this.measure(title, size, true) <= maxW) {
+      this.text(cx, 27.30, title, size, true, this.primary);
+    } else {
+      var best = null, k, a, b, w, m;
+      for (k = 1; k < title.length; k++) {
+        a = title.substring(0, k);
+        b = title.substring(k);
+        w = Math.max(this.measure(a, 12, true), this.measure(b, 12, true));
+        if (best === null || w < best[0]) { best = [w, a, b]; }
+      }
+      a = best[1];
+      b = best[2];
+      m = (this.measure(a, 12, true) >= this.measure(b, 12, true)) ? a : b;
+      var lsize = this.fitSize(m, [13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9], true, maxW);
+      this.text(cx, 27.55, a, lsize, true, this.primary);
+      this.text(cx, 27.10, b, lsize, true, this.primary);
+    }
+    var ssize = this.fitSize(cfg.subtitle, [22, 21, 20, 19, 18, 17, 16, 15, 14, 13], true, maxW);
+    this.text(cx, 26.30, cfg.subtitle, ssize, true, this.black);
+  };
+
+  Sheet.prototype.drawHeader = function () {
+    var cfg = this.cfg, c = this.primary, i;
+
+    this.drawTitles();
+
+    this.text(0.02, 25.00, cfg.nameLabel, 11, false, this.black, 'left');
+    this.line([[1.32, 24.72], [7.80, 24.72]], c, 0.9);
+
+    this.text(0.00, 24.00, cfg.studentIdLabel, 11, false, this.black, 'left');
+    for (i = 0; i < cfg.studentIdDigits; i++) {
+      this.rect(1.50 + i * 0.65, 23.675, 0.65, 0.65, c, 0.7);
+    }
+
+    this.dashRect(8.35, 25.50 - 1.825, 4.55, 1.825, c, 0.9, 0.18, 0.12);
+    this.text(8.35 + 4.55 / 2, 25.50 - 1.825 / 2, cfg.barcodeLabel, 10.5, true, c);
+
+    for (i = 0; i < 15; i++) {
+      this.rect(0.55 + i * 0.8, 27.85, 0.5, 0.25, null, 0, this.black);
+    }
+
+    this.drawNotes();
+    this.drawSample();
+    this.drawPaperType();
+    this.drawAbsent();
+  };
+
+  Sheet.prototype.layoutNotes = function (size) {
+    var width = 7.72;
+    var em = size * PT2CM;
+    var lh = em * NOTE_LINE;
+    var out = [], i, item, prefix, pw, lines, j;
+    for (i = 0; i < this.cfg.notes.length; i++) {
+      item = this.cfg.notes[i];
+      prefix = (i + 1) + '．';
+      pw = this.measure(prefix, size, false);
+      lines = this.wrapHanging(item, size, width, width - pw, 1.5 * em, false);
+      out.push([0, prefix + lines[0]]);
+      for (j = 1; j < lines.length; j++) {
+        out.push([1.5 * em, lines[j]]);
+      }
+    }
+    return { lines: out, lh: lh };
+  };
+
+  Sheet.prototype.drawNotes = function () {
+    var c = this.primary;
+    var top = 23.20, h = 4.40, w = 8.00;
+    this.rect(0, top - h, w, h, c, 0.8);
+
+    var sizes = [8, 7.8, 7.6, 7.4, 7.2, 7.0, 6.8, 6.6, 6.4, 6.2];
+    var chosen = null, i, lay;
+    for (i = 0; i < sizes.length; i++) {
+      lay = this.layoutNotes(sizes[i]);
+      if (lay.lh * (lay.lines.length + 1) <= h - 0.25) {
+        chosen = { size: sizes[i], lay: lay };
+        break;
+      }
+    }
+    if (!chosen) {
+      lay = this.layoutNotes(6.2);
+      chosen = { size: 6.2, lay: lay };
+    }
+
+    var size = chosen.size;
+    var lh = chosen.lay.lh;
+    this.text(0.12, 23.05, '注意事项：', size, true, this.black, 'left', 'top');
+    var y = 23.05 - lh;
+    for (i = 0; i < chosen.lay.lines.length; i++) {
+      this.text(0.12 + chosen.lay.lines[i][0], y, chosen.lay.lines[i][1],
+                size, false, this.black, 'left', 'top');
+      y -= lh;
+    }
+  };
+
+  Sheet.prototype.drawSample = function () {
+    var c = this.primary;
+    var x = 8.35, top = 23.20, w = 4.55, h = 2.00;
+    this.rect(x, top - h, w, h, c, 0.8);
+
+    this.text(x + 0.10, top - 0.12, '填涂样例', 9, true, this.black, 'left', 'top');
+    this.text(x + 0.10, top - 0.72, '正确填涂', 8.5, false, this.black, 'left');
+    this.text(x + 0.10, top - 1.30, '错误填涂', 8.5, false, this.black, 'left');
+
+    // 正确填涂
+    this.rect(x + 1.75, top - 0.92 - 0.25, 0.50, 0.25, null, 0, this.black);
+
+    var b0 = x + 1.75, m = top - 1.42, i;
+    for (i = 0; i < 4; i++) {
+      this.rect(b0 + i * 0.75, m, 0.50, 0.25, c, 0.7);
+    }
+
+    // 第一种：斜涂
+    var ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(X(b0 + 0.04), Y(m + 0.06));
+    ctx.lineTo(X(b0 + 0.30), Y(m + 0.20));
+    ctx.lineTo(X(b0 + 0.46), Y(m + 0.19));
+    ctx.lineTo(X(b0 + 0.20), Y(m + 0.04));
+    ctx.closePath();
+    ctx.fillStyle = this.black;
+    ctx.fill();
+
+    // 第二种：一道横线
+    this.rect(b0 + 0.77, m + 0.09, 0.46, 0.075, null, 0, this.black);
+
+    // 第三种：打叉
+    var b2 = b0 + 1.50;
+    this.line([[b2 + 0.06, m + 0.05], [b2 + 0.44, m + 0.20]], this.black, 1.0);
+    this.line([[b2 + 0.06, m + 0.20], [b2 + 0.44, m + 0.05]], this.black, 1.0);
+
+    // 第四种：画圈
+    var b3 = b0 + 2.50, cy = Y(m + 0.125);
+    ctx.beginPath();
+    ctx.arc(X(b3), cy, 0.10, 0, Math.PI * 2, false);
+    ctx.fillStyle = this.black;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(X(b3), cy, 0.05, 0, Math.PI * 2, false);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  };
+
+  Sheet.prototype.drawPaperType = function () {
+    var cfg = this.cfg, c = this.primary;
+    var x = 8.35, top = 20.80, w = 2.50, h = 2.00;
+    this.rect(x, top - h, w, h, c, 0.8);
+    this.text(x + 0.10, top - 0.12, cfg.paperTypeTitle, 9, true, this.black, 'left', 'top');
+
+    for (var i = 0; i < 2 && i < cfg.paperTypes.length; i++) {
+      var yy = top - 0.78 - i * 0.52;
+      this.text(x + 0.18, yy, cfg.paperTypes[i], 9, false, this.black, 'left');
+      this.rect(x + 1.55, yy - 0.115, 0.50, 0.23, c, 0.7);
+    }
+  };
+
+  Sheet.prototype.drawAbsent = function () {
+    var cfg = this.cfg, c = this.primary;
+    var x = 11.20, top = 20.80, w = 1.70, h = 2.00;
+    this.rect(x, top - h, w, h, c, 0.8);
+    this.text(x + 0.10, top - 0.12, cfg.absentLabel, 8.5, true, this.black, 'left', 'top');
+    this.rect(x + 0.55, top - 1.05, 0.50, 0.25, c, 0.7);
+  };
+
+  /* ------------------------- 通用块 ------------------------- */
+  Sheet.prototype.answerFrame = function (x, top, bottom, hintBottom, hintTop) {
+    var h = top - bottom;
+    this.rrect(x, bottom, PAGE.COLW, h, 0.353, this.primary, 1.0);
+    if (hintBottom) {
+      this.text(x + PAGE.COLW / 2, bottom + 0.30, this.cfg.hintText, 8, false, this.primary);
+    }
+    if (hintTop) {
+      this.text(x + PAGE.COLW / 2, top - 0.30, this.cfg.hintText, 8, false, this.primary);
+    }
+  };
+
+  Sheet.prototype.innerBox = function (colX) {
+    this.rect(colX + 0.20, 1.20, 12.50, 25.60, this.black, 0.9);
+  };
+
+  Sheet.prototype.sectionBox = function (x, top, w, h, heading) {
+    this.rect(x, top - h, w, h, this.black, 0.9);
+    this.text(x + 0.10, top + 0.55, heading, 10, true, this.black, 'left', 'top');
+  };
+
+  /* ------------------------- 选择题 ------------------------- */
+  Sheet.prototype.choiceHeight = function () {
+    var cfg = this.cfg;
+    if (cfg.mode === 'bubble') { return BUBBLE_H; }
+    var blocks = 0;
+    if (cfg.single > 0) { blocks++; }
+    if (cfg.multi > 0) { blocks++; }
+    if (blocks === 0) { return BUBBLE_H; }
+    return 2 * T_PAD + blocks * (T_GROUP + T_HDR + T_ANS) + (blocks - 1) * T_GAP;
+  };
+
+  Sheet.prototype.choiceHeading = function () {
+    var s = this.cfg.single, m = this.cfg.multi;
+    if (s > 0 && m > 0) { return '一、选择题（1—' + s + ' 单选，' + (s + 1) + '—' + (s + m) + ' 多选）'; }
+    if (m > 0) { return '一、选择题（1—' + m + ' 多选）'; }
+    return '一、选择题';
+  };
+
+  Sheet.prototype.drawChoice = function (top, height) {
+    if (this.cfg.mode === 'bubble') { this.drawBubbles(top); }
+    else { this.drawChoiceTable(top); }
+  };
+
+  Sheet.prototype.bracket = function (x, y, side) {
+    var half = 0.125, y0 = y + 0.125, y1 = y0 - 0.25;
+    var pts;
+    if (side < 0) {
+      pts = [[x - half, y0], [x - 2 * half, y0], [x - 2 * half, y1], [x - half, y1]];
+    } else {
+      pts = [[x + half, y0], [x + 2 * half, y0], [x + 2 * half, y1], [x + half, y1]];
+    }
+    this.line(pts, this.primary, 0.7);
+  };
+
+  Sheet.prototype.drawBubbles = function (top) {
+    var total = this.cfg.single + this.cfg.multi;
+    var perCol = 4, stepY = 0.55, colD = 4.05, startY = top - 0.53;
+    var i, col, row, x, y, k, letters = 'ABCD';
+
+    for (i = 0; i < total; i++) {
+      col = Math.floor(i / perCol);
+      row = i % perCol;
+      x = 0.70 + col * colD;
+      y = startY - row * stepY;
+      this.text(x, y, String(i + 1), 10, false, this.black);
+      for (k = 0; k < 4; k++) {
+        var lx = x + 0.70 + k * 0.75;
+        this.text(lx, y, letters.charAt(k), 8.5, false, this.primary);
+        this.bracket(lx, y, -1);
+        this.bracket(lx, y, 1);
+      }
+    }
+    for (row = 0; row < perCol; row++) {
+      var yTop = startY - row * stepY + 0.125;
+      this.rect(-0.70, yTop - 0.25, 0.50, 0.25, null, 0, this.black);
+    }
+  };
+
+  Sheet.prototype.drawChoiceTable = function (top) {
+    var cfg = this.cfg;
+    var boxL = 0.20, boxR = 12.70, pad = 0.15, lwcol = 1.35;
+    var x0 = boxL + pad;
+    var totalW = (boxR - pad) - x0;
+    var ws = (totalW - lwcol) / Math.max(cfg.single, 1);
+    var wm = 2.0 * ws;
+    var y = top - T_PAD;
+
+    if (cfg.single > 0) {
+      y = this.tableBlock(x0, y, lwcol, ws, 1, cfg.single, '单项选择题', boxR, null);
+      y -= T_GAP;
+    }
+    if (cfg.multi > 0) {
+      var note = (cfg.single + 1) + '—' + (cfg.single + cfg.multi) + ' 为多项选择题，请填写全部正确选项';
+      this.tableBlock(x0, y, lwcol, wm, cfg.single + 1, cfg.single + cfg.multi,
+                      '多项选择题', boxR, note);
+    }
+  };
+
+  Sheet.prototype.tableBlock = function (x, yTop, lwcol, cw, first, last, label, boxRight, note) {
+    var n = last - first + 1;
+    if (n <= 0) { return yTop; }
+    var y = yTop, i;
+    this.text(x, y, label, 8, false, this.gray, 'left', 'top');
+    y -= T_GROUP;
+
+    var hdr = T_HDR, ans = T_ANS;
+    var tw = lwcol + n * cw;
+    var bottom = y - hdr - ans;
+
+    this.rect(x, bottom, tw, hdr + ans, this.black, 0.9);
+    this.line([[x, y - hdr], [x + tw, y - hdr]], this.black, 0.7);
+    for (i = 0; i <= n; i++) {
+      this.line([[x + lwcol + i * cw, bottom], [x + lwcol + i * cw, y]], this.black, 0.7);
+    }
+
+    this.text(x + lwcol / 2, y - hdr / 2, '题号', 9, false, this.black);
+    this.text(x + lwcol / 2, bottom + ans / 2, '答案', 9, false, this.black);
+    for (i = 0; i < n; i++) {
+      this.text(x + lwcol + (i + 0.5) * cw, y - hdr / 2, String(first + i), 10, false, this.black);
+    }
+
+    if (note) {
+      var nx = x + tw + 0.12;
+      var avail = boxRight - nx - 0.05;
+      if (avail > 0.8) {
+        var size = 7.5;
+        var lines = this.wrap(note, size, avail, false);
+        var lh = size * PT2CM * 1.5;
+        var yy = bottom + ans / 2 + lh * (lines.length - 1) / 2;
+        for (i = 0; i < lines.length; i++) {
+          this.text(nx, yy, lines[i], size, false, this.gray, 'left');
+          yy -= lh;
+        }
+      }
+    }
+    return bottom;
+  };
+
+  /* ------------------------- 填空题 ------------------------- */
+  Sheet.prototype.drawBlanks = function (top) {
+    var d = 4.05;
+    for (var i = 0; i < this.cfg.blanks.length && i < 3; i++) {
+      var x = 0.70 + i * d + 0.10;
+      this.text(x, top - 0.80, this.cfg.blanks[i] + '.', 10, false, this.black);
+      this.line([[x + 0.40, top - 1.00], [x + 0.40 + 3.05, top - 1.00]], this.primary, 0.8);
+    }
+  };
+
+  /* ------------------------- 插图 ------------------------- */
+  Sheet.prototype.maybeImage = function (key, region) {
+    var spec = this.cfg.images[key];
+    if (!spec || !spec.img) { return; }
+    var img = spec.img;
+    if (!img.complete || !img.naturalWidth) { return; }
+
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    var margin = 0.15;
+    var w = spec.widthCm || Math.min(4.8, region.w * 0.40);
+    var h = w * ih / iw;
+    var maxW = Math.max(0.5, region.w - 2 * margin);
+    var maxH = Math.max(0.5, region.h - 2 * margin);
+    var k = Math.min(1, maxW / w, maxH / h);
+    w = w * k;
+    h = h * k;
+
+    var x0 = region.x + region.w - margin - w;
+    var yTop = region.top - margin;
+    this.ctx.drawImage(img, X(x0), Y(yTop), w, h);
+  };
+
+  /* ------------------------- 组页 ------------------------- */
+  Sheet.prototype.drawRegistration = function () {
+    var xAbs = [0.7, 13.9, 27.1, 40.3];
+    var i, x;
+    for (i = 0; i < 3; i++) {
+      x = xAbs[i];
+      this.rectAbs(x, 0.75, 1.0, 0.6, this.black);
+      this.rectAbs(x, 28.4, 1.0, 0.6, this.black);
+    }
+    this.rectAbs(xAbs[3], 0.75, 1.0, 0.6, this.black);
+    this.rectAbs(xAbs[3], 28.4, 1.0, 0.6, this.black);
+  };
+
+  Sheet.prototype.drawFooter = function () {
+    var txt = this.cfg.footer
+      .replace(/\{page\}/g, String(this.pageNo))
+      .replace(/\{pages\}/g, String(this.totalPages));
+    this.textAbs(PAGE.W / 2, 0.42, txt, 10.5, true, this.primary);
+  };
+
+  Sheet.prototype.drawPage1 = function () {
+    var cfg = this.cfg;
+
+    this.drawRegistration();
+    this.drawFooter();
+    this.drawHeader();
+
+    // 第一列
+    this.answerFrame(0, 18.4, 0.6, true, false);
+    var y = 17.70;
+    var ch = this.choiceHeight();
+    this.sectionBox(0.20, y, 12.50, ch, this.choiceHeading());
+    this.drawChoice(y, ch);
+
+    y = y - ch - 0.70;
+    this.sectionBox(0.20, y, 12.50, 1.40, '二、填空题');
+    this.drawBlanks(y);
+
+    y = y - 1.40 - 0.70;
+    var ebBottom = 1.20;
+    var ebH = y - ebBottom;
+    this.sectionBox(0.20, y, 12.50, ebH, '三、解答题');
+    this.text(1.50, y - 0.50, cfg.labels['15'], 11, false, this.black);
+    this.maybeImage('15', { x: 0.20, top: y, w: 12.50, h: ebH });
+
+    // 第二列
+    this.answerFrame(13.2, 27.4, 0.6, true, true);
+    this.innerBox(13.2);
+    var boxTop = 26.80, boxH = 25.60;
+    var split16 = cfg.split['16'];
+    var divY = boxTop - boxH * split16;
+    this.line([[13.40, divY], [25.90, divY]], this.black, 0.8);
+    this.text(14.70, boxTop - 0.50, '（续15题）', 11, true, this.primary);
+    this.text(14.70, divY - 0.50, cfg.labels['16'], 11, false, this.black);
+    this.maybeImage('cont15', { x: 13.40, top: boxTop, w: 12.50, h: boxH * split16 });
+    this.maybeImage('16', { x: 13.40, top: divY, w: 12.50, h: boxH * (1 - split16) });
+
+    // 第三列
+    this.answerFrame(26.4, 27.4, 0.6, true, true);
+    this.innerBox(26.4);
+    this.text(27.90, 26.30, cfg.labels['17'], 11, false, this.black);
+    this.maybeImage('17', { x: 26.60, top: 26.80, w: 12.50, h: 25.60 });
+  };
+
+  Sheet.prototype.drawPage2 = function () {
+    var cfg = this.cfg;
+
+    this.drawRegistration();
+    this.drawFooter();
+
+    // 第一列
+    this.answerFrame(0, 27.4, 0.6, true, false);
+    this.innerBox(0);
+    this.text(1.50, 26.30, cfg.labels['18'], 11, false, this.black);
+    this.maybeImage('18', { x: 0.20, top: 26.80, w: 12.50, h: 25.60 });
+
+    // 第二列
+    this.answerFrame(13.2, 27.4, 0.6, true, true);
+    this.innerBox(13.2);
+    var boxTop = 26.80, boxH = 25.60;
+    var split19 = cfg.split['19'];
+    var divY = boxTop - boxH * split19;
+    this.line([[13.40, divY], [25.90, divY]], this.black, 0.8);
+    this.text(14.70, boxTop - 0.50, '（续18题）', 11, true, this.primary);
+    this.text(14.70, divY - 0.50, cfg.labels['19'], 11, false, this.black);
+    this.maybeImage('cont18', { x: 13.40, top: boxTop, w: 12.50, h: boxH * split19 });
+    this.maybeImage('19', { x: 13.40, top: divY, w: 12.50, h: boxH * (1 - split19) });
+
+    // 第三列
+    this.answerFrame(26.4, 27.4, 0.6, true, true);
+    this.innerBox(26.4);
+    this.text(27.90, 26.30, '（续19题）', 11, true, this.primary);
+    this.maybeImage('cont19', { x: 26.60, top: 26.80, w: 12.50, h: 25.60 });
+  };
+
+  Sheet.prototype.draw = function () {
+    if (this.pageNo === 1) { this.drawPage1(); }
+    else { this.drawPage2(); }
+    return this.canvas;
+  };
+
+  /* ------------------------------------------------------------------
+   *  配置
+   * ------------------------------------------------------------------ */
+  var DEFAULT_NOTES = [
+    '答题前，考生务必用黑色字迹的钢笔或签字笔将姓名和考生号填写在答题卡上。',
+    '回答选择题时，选出每小题答案以后，用2B铅笔把答题卡上对应题目的答案标号涂黑。' +
+      '如需改动，用橡皮擦擦干净后，再选其它答案标号涂黑。回答非选择题时，' +
+      '将答案写在答题卡上指定区域内，超出答题区域的答案无效。',
+    '正确填涂试卷类型，否则答案无效。',
+    '答题卡保持卡面整洁，不要折叠和弄破。'
+  ];
+
+  function makeCfg(ui) {
+    var labels = {};
+    for (var q in ui.scores) {
+      if (ui.scores.hasOwnProperty(q)) {
+        labels[q] = q + '.（' + ui.scores[q] + '分）';
+      }
+    }
+    return {
+      title: ui.title,
+      subtitle: ui.subtitle,
+      footer: ui.footer,
+      mode: ui.mode,
+      single: ui.single,
+      multi: ui.multi,
+      colorMode: ui.colorMode,
+      primary: ui.primary,
+      labels: labels,
+      split: { '16': 0.25, '19': 0.5 },
+      images: ui.images,
+      notes: DEFAULT_NOTES,
+      blanks: ['12', '13', '14'],
+      studentIdDigits: 10,
+      studentIdLabel: '考生号',
+      nameLabel: '姓名：',
+      barcodeLabel: '条形码粘贴区',
+      paperTypeTitle: '试卷类型',
+      paperTypes: ['试卷A', '试卷B'],
+      absentLabel: '缺考标记',
+      hintText: '请在各题目的答题区域内作答，超出黑色矩形边框限定区域的答案无效'
+    };
+  }
+
+  function buildSheets(cfg, scale) {
+    var a = new Sheet(cfg, 1, scale);
+    a.draw();
+    var b = new Sheet(cfg, 2, scale);
+    b.draw();
+    return [a, b];
+  }
+
+  /* ------------------------------------------------------------------
+   *  PDF 生成（纯 JavaScript，无需任何插件）
+   * ------------------------------------------------------------------ */
+  function dataUrlToBytes(url) {
+    var comma = url.indexOf(',');
+    var base64 = url.substring(comma + 1);
+    var bin = atob(base64);
+    var n = bin.length;
+    var out = new Uint8Array(n);
+    for (var i = 0; i < n; i++) { out[i] = bin.charCodeAt(i) & 0xff; }
+    return out;
+  }
+
+  function buildPdf(pages, wPt, hPt) {
+    var objs = [], i, n = pages.length;
+    var kids = [];
+    for (i = 0; i < n; i++) { kids.push((3 + i * 3) + ' 0 R'); }
+
+    objs.push({ head: '<< /Type /Catalog /Pages 2 0 R >>' });
+    objs.push({ head: '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>' });
+
+    for (i = 0; i < n; i++) {
+      var pageNum = 3 + i * 3;
+      var contentNum = pageNum + 1;
+      var imgNum = pageNum + 2;
+
+      objs.push({
+        head: '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + wPt + ' ' + hPt + '] ' +
+              '/Resources << /XObject << /Im0 ' + imgNum + ' 0 R >> >> ' +
+              '/Contents ' + contentNum + ' 0 R >>'
+      });
+
+      var content = 'q ' + wPt + ' 0 0 ' + hPt + ' 0 0 cm /Im0 Do Q';
+      objs.push({
+        head: '<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream'
+      });
+
+      objs.push({
+        head: '<< /Type /XObject /Subtype /Image /Width ' + pages[i].w +
+              ' /Height ' + pages[i].h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 ' +
+              '/Filter /DCTDecode /Length ' + pages[i].bytes.length + ' >>\nstream\n',
+        stream: pages[i].bytes,
+        tail: '\nendstream'
+      });
+    }
+
+    var out = [], total = 0;
+    function push(s) {
+      var a = new Uint8Array(s.length);
+      for (var j = 0; j < s.length; j++) { a[j] = s.charCodeAt(j) & 0xff; }
+      out.push(a);
+      total += a.length;
+    }
+    function pushBytes(u) { out.push(u); total += u.length; }
+
+    push('%PDF-1.4\n');
+    var offsets = [];
+    for (i = 0; i < objs.length; i++) {
+      offsets.push(total);
+      push((i + 1) + ' 0 obj\n');
+      push(objs[i].head);
+      if (objs[i].stream) {
+        pushBytes(objs[i].stream);
+        if (objs[i].tail) { push(objs[i].tail); }
+      }
+      push('\nendobj\n');
+    }
+
+    var xrefOffset = total;
+    push('xref\n0 ' + (objs.length + 1) + '\n');
+    push('0000000000 65535 f \n');
+    for (i = 0; i < offsets.length; i++) {
+      var s = '0000000000' + offsets[i];
+      push(s.substring(s.length - 10) + ' 00000 n \n');
+    }
+    push('trailer\n<< /Size ' + (objs.length + 1) + ' /Root 1 0 R >>\n');
+    push('startxref\n' + xrefOffset + '\n%%EOF\n');
+
+    var all = new Uint8Array(total), pos = 0;
+    for (i = 0; i < out.length; i++) {
+      all.set(out[i], pos);
+      pos += out[i].length;
+    }
+    return all;
+  }
+
+  function renderPages(cfg, dpi) {
+    var scale = dpi / 2.54;
+    var pages = [];
+    for (var p = 1; p <= 2; p++) {
+      var sh = new Sheet(cfg, p, scale);
+      sh.draw();
+      var url = sh.canvas.toDataURL('image/jpeg', 0.92);
+      pages.push({ bytes: dataUrlToBytes(url), w: sh.canvas.width, h: sh.canvas.height });
+      sh.canvas.width = 0;
+      sh.canvas.height = 0;
+    }
+    return pages;
+  }
+
+  function safeName(s) {
+    var t = String(s || '答题卡').replace(/[\\\/:*?"<>|\r\n\t]/g, '_');
+    t = t.replace(/^\s+|\s+$/g, '');
+    if (t.length > 40) { t = t.substring(0, 40); }
+    return (t || '答题卡') + '.pdf';
+  }
+
+  function saveBytes(bytes, name) {
+    var blob = null;
+    try { blob = new Blob([bytes.buffer], { type: 'application/pdf' }); } catch (e) { blob = null; }
+
+    if (blob && window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(blob, name);
+      return 'saved';
+    }
+    if (blob && window.URL && window.URL.createObjectURL) {
+      var url = window.URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      if ('download' in a) {
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () {
+          if (a.parentNode) { a.parentNode.removeChild(a); }
+          window.URL.revokeObjectURL(url);
+        }, 3000);
+        return 'download';
+      }
+      window.open(url);
+      return 'opened';
+    }
+
+    var bin = '', i;
+    for (i = 0; i < bytes.length; i++) { bin += String.fromCharCode(bytes[i]); }
+    window.location.href = 'data:application/pdf;base64,' + btoa(bin);
+    return 'dataurl';
+  }
+
+  /* ------------------------------------------------------------------
+   *  界面
+   * ------------------------------------------------------------------ */
+  var ui = {
+    title: '2026年普通高等学校招生全国统一考试',
+    subtitle: '数学答题卡',
+    footer: '数学答题卡第{page}面（共{pages}面）',
+    mode: 'bubble',
+    single: 8,
+    multi: 3,
+    colorMode: 'color',
+    primary: [255, 50, 165],
+    scores: { '15': '13', '16': '15', '17': '15', '18': '17', '19': '17' },
+    images: {}
+  };
+
+  /* 兼容老浏览器：IE 系列与很旧的 Chrome 可能不支持 canvas / FileReader / localStorage */
+  function checkSupport() {
+    var cv = document.createElement('canvas');
+    var okCanvas = !!(cv && cv.getContext && cv.getContext('2d'));
+    var okReader = (typeof window.FileReader === 'function');
+    var okBlob = (typeof window.Blob === 'function' && typeof window.Uint8Array === 'function');
+    if (okCanvas && okReader && okBlob) { return true; }
+
+    var msg = '<div style="padding:40px;font:16px/2 \'Microsoft YaHei\',sans-serif">' +
+      '<h2 style="color:#c00">这台电脑的浏览器版本太旧</h2>' +
+      '<p>本页需要画布功能，建议用下面任一浏览器打开：</p>' +
+      '<ul><li>Microsoft Edge（Windows 10 自带，推荐）</li>' +
+      '<li>Google Chrome（任意较新版本）</li>' +
+      '<li>360 浏览器 / QQ 浏览器，切到「极速模式」</li></ul>' +
+      '<p style="color:#888">如果电脑是 Windows 7 且只有 IE11，请让管理员装一个 Chrome 或新版 Edge 再打开本页。</p>' +
+      '</div>';
+    var holder = document.getElementById('pages');
+    if (holder) { holder.innerHTML = msg; }
+    var side = document.getElementById('panel');
+    if (side) { side.style.display = 'none'; }
+    return false;
+  }
+
+  var IMAGE_KEYS = [
+    ['15', '第1页 左列（15 题）'],
+    ['cont15', '第1页 中列上（续 15 题）'],
+    ['16', '第1页 中列下（16 题）'],
+    ['17', '第1页 右列（17 题）'],
+    ['18', '第2页 左列（18 题）'],
+    ['cont18', '第2页 中列上（续 18 题）'],
+    ['19', '第2页 中列下（19 题）'],
+    ['cont19', '第2页 右列（续 19 题）']
+  ];
+
+  function $(id) { return document.getElementById(id); }
+
+  function status(msg, ms) {
+    var el = $('status');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.innerHTML = msg;
+    el.style.display = 'block';
+    if (ms) { setTimeout(function () { el.style.display = 'none'; }, ms); }
+  }
+
+  function buildImageRows() {
+    var box = $('imgRows'), html = '', i, k, item;
+    for (i = 0; i < IMAGE_KEYS.length; i++) {
+      k = IMAGE_KEYS[i][0];
+      item = IMAGE_KEYS[i][1];
+      html += '<div class="imgrow" id="row_' + k + '">' +
+              '<div class="name">' + item + '</div>' +
+              '<input type="file" id="f_' + k + '" accept="image/*"><br>' +
+              '宽度 <input type="text" class="short" id="w_' + k + '" placeholder="4.8"> cm ' +
+              '<button type="button" id="x_' + k + '">清除</button>' +
+              '<div class="file" id="n_' + k + '"></div></div>';
+    }
+    box.innerHTML = html;
+
+    for (i = 0; i < IMAGE_KEYS.length; i++) {
+      bindImageRow(IMAGE_KEYS[i][0]);
+    }
+  }
+
+  function bindImageRow(key) {
+    $('f_' + key).onchange = function () {
+      var input = this, file = input.files && input.files[0];
+      if (!file) { return; }
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+          ui.images[key] = { img: img, name: file.name, widthCm: readWidth(key) };
+          $('n_' + key).innerHTML = file.name;
+          schedule();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    $('w_' + key).onchange = function () {
+      if (ui.images[key]) { ui.images[key].widthCm = readWidth(key); schedule(); }
+    };
+
+    $('x_' + key).onclick = function () {
+      delete ui.images[key];
+      $('f_' + key).value = '';
+      $('w_' + key).value = '';
+      $('n_' + key).innerHTML = '';
+      schedule();
+    };
+  }
+
+  function readWidth(key) {
+    var raw = String($('w_' + key).value).replace(/[^0-9.]/g, '');
+    var v = parseFloat(raw);
+    if (!v || v <= 0) { return 4.8; }          // 默认 4.8cm
+    if (v > 12.0) { v = 12.0; }                // 再宽也会被自动缩到边框内
+    return v;
+  }
+
+  function buildScoreRow() {
+    var box = $('scoreRow'), html = '', q;
+    var list = ['15', '16', '17', '18', '19'];
+    for (var i = 0; i < list.length; i++) {
+      q = list[i];
+      html += '<span class="score-item">' + q + ' <input type="text" class="short" id="s_' + q +
+              '" value="' + ui.scores[q] + '"> 分</span>';
+    }
+    box.innerHTML = html;
+    for (i = 0; i < list.length; i++) {
+      q = list[i];
+      $('s_' + q).onchange = function () {
+        ui.scores[this.id.substring(2)] = this.value;
+        schedule();
+      };
+    }
+  }
+
+  function readUi() {
+    ui.title = $('tTitle').value;
+    ui.subtitle = $('tSubtitle').value;
+    ui.footer = $('tFooter').value;
+    ui.mode = $('mTable').checked ? 'table' : 'bubble';
+    ui.single = Math.max(0, parseInt($('nSingle').value, 10) || 0);
+    ui.multi = Math.max(0, parseInt($('nMulti').value, 10) || 0);
+    ui.colorMode = $('cBw').checked ? 'bw' : 'color';
+    ui.primary = parseColor($('tPrimary').value);
+  }
+
+  function syncSwatch() {
+    var list = document.getElementsByTagName('span');
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].className === 'swatch') {
+        list[i].onclick = function () {
+          $('tPrimary').value = this.getAttribute('data-rgb');
+          $('cColor').checked = true;
+          schedule();
+        };
+      }
+    }
+  }
+
+  /* ------------------------- 预览 ------------------------- */
+  var timer = null;
+  function schedule() {
+    if (timer) { clearTimeout(timer); }
+    timer = setTimeout(preview, 220);
+  }
+
+  function preview() {
+    readUi();
+    var cfg = makeCfg(ui);
+    var scale = 18;
+    var sheets = buildSheets(cfg, scale);
+
+    placeCanvas($('c1'), sheets[0].canvas);
+    placeCanvas($('c2'), sheets[1].canvas);
+    saveSettings();
+  }
+
+  function placeCanvas(target, src) {
+    if (target.getContext) {
+      target.width = src.width;
+      target.height = src.height;
+      var c = target.getContext('2d');
+      c.drawImage(src, 0, 0);
+    }
+    src.width = 0;
+    src.height = 0;
+  }
+
+  /* ------------------------- 设置记忆 ------------------------- */
+  var STORE_KEY = 'asm_settings_v1';
+
+  function saveSettings() {
+    try {
+      var data = {
+        title: ui.title, subtitle: ui.subtitle, footer: ui.footer,
+        mode: ui.mode, single: ui.single, multi: ui.multi,
+        colorMode: ui.colorMode, primary: $('tPrimary').value,
+        scores: ui.scores
+      };
+      window.localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    } catch (e) { /* 隐私模式忽略 */ }
+  }
+
+  function loadSettings() {
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      if (!raw) { return; }
+      var d = JSON.parse(raw);
+      if (d.title) { $('tTitle').value = d.title; }
+      if (d.subtitle) { $('tSubtitle').value = d.subtitle; }
+      if (d.footer) { $('tFooter').value = d.footer; }
+      if (d.mode === 'table') { $('mTable').checked = true; } else { $('mBubble').checked = true; }
+      if (typeof d.single === 'number') { $('nSingle').value = d.single; }
+      if (typeof d.multi === 'number') { $('nMulti').value = d.multi; }
+      if (d.colorMode === 'bw') { $('cBw').checked = true; } else { $('cColor').checked = true; }
+      if (d.primary) { $('tPrimary').value = d.primary; }
+      if (d.scores) {
+        for (var q in d.scores) {
+          if (d.scores.hasOwnProperty(q) && $('s_' + q)) { $('s_' + q).value = d.scores[q]; }
+        }
+      }
+    } catch (e) { /* 忽略 */ }
+  }
+
+  /* ------------------------- 输出 ------------------------- */
+  function doPdf() {
+    readUi();
+    var dpi = parseInt($('selDpi').value, 10) || 200;
+    var cfg = makeCfg(ui);
+    var name = safeName(ui.title + '_' + ui.subtitle);
+    status('正在生成 PDF（' + dpi + ' dpi），请稍候……');
+    setTimeout(function () {
+      try {
+        var pages = renderPages(cfg, dpi);
+        var bytes = buildPdf(pages, 1190.5511811, 841.8897638);
+        saveBytes(bytes, name);
+        status('已生成：' + name + '（' + Math.round(bytes.length / 1024) + ' KB）', 7000);
+      } catch (err) {
+        status('生成失败：' + (err && err.message ? err.message : err) +
+               '　可以把清晰度调低到 150 dpi 再试，或点「另存为图片」。', 12000);
+      }
+    }, 60);
+  }
+
+  /* 备用导出：两张 PNG，老机器或 PDF 打不开时用 */
+  function doPng() {
+    readUi();
+    var dpi = Math.min(200, parseInt($('selDpi').value, 10) || 200);
+    var cfg = makeCfg(ui);
+    var base = safeName(ui.title + '_' + ui.subtitle).replace(/\.pdf$/, '');
+    status('正在导出图片（' + dpi + ' dpi）……');
+    setTimeout(function () {
+      try {
+        for (var p = 1; p <= 2; p++) {
+          var sh = new Sheet(cfg, p, dpi / 2.54);
+          sh.draw();
+          var a = document.createElement('a');
+          a.href = sh.canvas.toDataURL('image/png');
+          a.download = base + '_第' + p + '页.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          sh.canvas.width = 0;
+          sh.canvas.height = 0;
+        }
+        status('已导出两张图片（打印时按 A3 横向、100% 缩放）', 8000);
+      } catch (err) {
+        status('导出图片失败：' + (err && err.message ? err.message : err), 10000);
+      }
+    }, 60);
+  }
+
+  function doPrint() {
+    readUi();
+    var dpi = 200;
+    var cfg = makeCfg(ui);
+    status('正在排版，随后会弹出打印窗口……');
+    setTimeout(function () {
+      var area = $('printArea');
+      area.innerHTML = '';
+      for (var p = 1; p <= 2; p++) {
+        var sh = new Sheet(cfg, p, dpi / 2.54);
+        sh.draw();
+        area.appendChild(sh.canvas);
+      }
+      status('');
+      window.print();
+    }, 80);
+  }
+
+  function resetAll() {
+    try { window.localStorage.removeItem(STORE_KEY); } catch (e) { }
+    $('tTitle').value = '2026年普通高等学校招生全国统一考试';
+    $('tSubtitle').value = '数学答题卡';
+    $('tFooter').value = '数学答题卡第{page}面（共{pages}面）';
+    $('mBubble').checked = true;
+    $('nSingle').value = '8';
+    $('nMulti').value = '3';
+    $('cColor').checked = true;
+    $('tPrimary').value = '255,50,165';
+    var list = ['15', '16', '17', '18', '19'];
+    var defs = { '15': '13', '16': '15', '17': '15', '18': '17', '19': '17' };
+    for (var i = 0; i < list.length; i++) { $('s_' + list[i]).value = defs[list[i]]; }
+    ui.images = {};
+    for (i = 0; i < IMAGE_KEYS.length; i++) {
+      var k = IMAGE_KEYS[i][0];
+      $('f_' + k).value = '';
+      $('w_' + k).value = '';
+      $('n_' + k).innerHTML = '';
+    }
+    preview();
+    status('已恢复默认设置', 2500);
+  }
+
+  /* ------------------------- 启动 ------------------------- */
+  function init() {
+    if (!checkSupport()) { return; }
+
+    buildScoreRow();
+    buildImageRows();
+    loadSettings();
+    syncSwatch();
+
+    var ids = ['tTitle', 'tSubtitle', 'tFooter', 'nSingle', 'nMulti', 'tPrimary'];
+    for (var i = 0; i < ids.length; i++) {
+      $(ids[i]).onchange = schedule;
+      $(ids[i]).onkeyup = schedule;
+    }
+    $('mBubble').onclick = schedule;
+    $('mTable').onclick = schedule;
+    $('cColor').onclick = schedule;
+    $('cBw').onclick = schedule;
+
+    $('btnPdf').onclick = doPdf;
+    $('btnPng').onclick = doPng;
+    $('btnPrint').onclick = doPrint;
+    $('btnReset').onclick = resetAll;
+
+    var qs = String(window.location.search || '');
+    if (qs.indexOf('render=') >= 0) {
+      renderMode(parseInt(qs.substring(qs.indexOf('render=') + 7), 10) || 1);
+      return;
+    }
+    preview();
+  }
+
+  /* 仅供自动检查使用：?render=1/2 单页放大，3=表格黑白，4=带插图 */
+  function renderMode(code) {
+    var pageNo = (code === 2) ? 2 : 1;
+    if (code === 3) { ui.mode = 'table'; ui.colorMode = 'bw'; }
+    if (code === 4) {
+      ui.mode = 'table';
+      var img = new Image();
+      img.onload = function () {
+        ui.images['15'] = { img: img, name: 'demo', widthCm: 4.6 };
+        ui.images['17'] = { img: img, name: 'demo', widthCm: 4.6 };
+        drawBig(pageNo);
+      };
+      img.src = '../figs/cube.png';
+      document.getElementById('panel').style.display = 'none';
+      return;
+    }
+    document.getElementById('panel').style.display = 'none';
+    drawBig(pageNo);
+  }
+
+  function drawBig(pageNo) {
+    var cfg = makeCfg(ui);
+    var sh = new Sheet(cfg, pageNo, 40);
+    sh.draw();
+    var cv = $('c1');
+    cv.width = sh.canvas.width;
+    cv.height = sh.canvas.height;
+    cv.getContext('2d').drawImage(sh.canvas, 0, 0);
+    sh.canvas.width = 0;
+    $('c2').parentNode.style.display = 'none';
+    cv.style.width = '1680px';
+    cv.style.maxWidth = 'none';
+    cv.style.height = 'auto';
+    cv.parentNode.style.maxWidth = 'none';
+    cv.parentNode.style.width = '1680px';
+    cv.parentNode.style.margin = '0';
+    document.getElementById('pages').style.marginLeft = '0';
+    document.getElementById('pages').style.padding = '10px';
+    document.getElementById('pages').style.width = '1700px';
+  }
+
+  /* ------------------------- 自检（加 ?selftest=1 触发） -------------------------
+   * 结果画成色条：全绿=通过；红条=有失败项；下方黑方块标出失败项序号。
+   * ------------------------------------------------------------------------- */
+  function selfTest() {
+    var checks = [];
+    function chk(name, ok) { checks.push({ name: name, ok: !!ok }); }
+
+    try {
+      var cfg = makeCfg(ui);
+
+      // 1 量字宽在不同缩放比下一致
+      var s1 = new Sheet(cfg, 1, 20);
+      var s2 = new Sheet(cfg, 1, 40);
+      var w1 = s1.measure('测试文字ABC', 10, false);
+      var w2 = s2.measure('测试文字ABC', 10, false);
+      chk('measure-stable', Math.abs(w1 - w2) < 0.3 && w1 > 1);
+
+      // 2 默认标题不溢出（12.4cm 内）
+      chk('title-fit', s1.measure(cfg.title, 16, true) <= 12.4);
+
+      // 3 表格模式高度在合理区间
+      var cfg2 = makeCfg(ui);
+      cfg2.mode = 'table';
+      var s3 = new Sheet(cfg2, 1, 20);
+      var hTable = s3.choiceHeight();
+      chk('table-height', hTable > 2.4 && hTable < 6.0);
+      chk('table-heading', s3.choiceHeading().indexOf('多选') > 0);
+
+      // 4 涂卡模式高度固定
+      chk('bubble-height', Math.abs(s1.choiceHeight() - 2.70) < 0.001);
+
+      // 5 页面有内容
+      var p1 = new Sheet(cfg, 1, 12); p1.draw();
+      var p2 = new Sheet(cfg, 2, 12); p2.draw();
+      chk('page1-ink', inkRatio(p1.canvas) > 0.02);
+      chk('page2-ink', inkRatio(p2.canvas) > 0.005);
+
+      // 6 生成 PDF 并逐项校验结构
+      var pages = renderPages(cfg, 40);
+      chk('jpeg-soi', pages[0].bytes[0] === 0xFF && pages[0].bytes[1] === 0xD8);
+      chk('page-pixels', pages[0].w > 300 && pages[0].h > 300);
+
+      var W = '1190.5511811', H = '841.8897638';
+      var pdf = buildPdf(pages, W, H);
+      var text = bytesToLatin1(pdf);
+      chk('pdf-header', text.substring(0, 8) === '%PDF-1.4');
+      chk('pdf-pages', (text.match(/\/Type \/Page[^s]/g) || []).length === 2);
+      chk('pdf-mediabox', text.indexOf('/MediaBox [0 0 ' + W + ' ' + H + ']') >= 0);
+      chk('pdf-dct', text.indexOf('/DCTDecode') >= 0);
+      chk('pdf-eof', text.substring(text.length - 6).indexOf('%%EOF') >= 0);
+
+      var sx = text.lastIndexOf('startxref');
+      var xrefPos = parseInt(text.substring(sx + 9).replace(/[^0-9]/g, ''), 10);
+      chk('xref-position', text.substring(xrefPos, xrefPos + 4) === 'xref');
+
+      var idx = text.indexOf('xref\n0 ');
+      var lines = text.substring(idx + 'xref\n0 '.length).split('\n');
+      // lines[0] = 对象总数；lines[1] = 第 0 号占位项；lines[2] = 1 号对象的偏移
+      var count = parseInt(lines[0], 10);
+      var firstEntry = String(lines[1]);
+      var off = parseInt(String(lines[2]).substring(0, 10), 10);
+      chk('obj1-offset', text.substring(off, off + 8) === '1 0 obj\n');
+
+      // catalog + pages + 2 页 × (page/content/image) = 8 个对象，xref 表另有 1 条占位
+      chk('xref-count', count === 9 && firstEntry.indexOf('65535 f') > 0);
+
+      // 诊断数值：画成灰阶色块，便于从截图像素回读
+      window.__diag = {
+        xrefPos: xrefPos,
+        obj1Off: off,
+        xrefCount: count,
+        firstEntryFirst10: firstEntry.substring(0, 10),
+        atOff: text.substring(off, off + 10),
+        pdfLen: pdf.length
+      };
+    } catch (e) {
+      checks.push({ name: 'exception:' + (e && e.message ? e.message : e), ok: false });
+    }
+
+    paintSelfTest(checks);
+    return checks;
+  }
+
+  function bytesToLatin1(u8) {
+    var out = [], i, step = 4096;
+    for (i = 0; i < u8.length; i += step) {
+      out.push(String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + step, u8.length))));
+    }
+    return out.join('');
+  }
+
+  function inkRatio(cv) {
+    var ctx = cv.getContext('2d');
+    var w = cv.width, h = cv.height;
+    var d = ctx.getImageData(0, 0, w, h).data;
+    var dark = 0, total = 0, i;
+    for (i = 0; i < d.length; i += 16) {
+      total++;
+      if (d[i] < 200) { dark++; }
+    }
+    return total ? dark / total : 0;
+  }
+
+  function paintSelfTest(checks) {
+    var bad = [], i;
+    for (i = 0; i < checks.length; i++) {
+      if (!checks[i].ok) { bad.push(i); }
+    }
+    var panel = document.getElementById('panel');
+    if (panel) { panel.style.display = 'none'; }
+    var pagesBox = document.getElementById('pages');
+    if (pagesBox) {
+      pagesBox.style.marginLeft = '0';
+      pagesBox.style.padding = '0';
+      pagesBox.style.position = 'fixed';
+      pagesBox.style.left = '0';
+      pagesBox.style.top = '0';
+      pagesBox.style.width = '800px';
+    }
+
+    var cv = $('c1');
+    cv.width = 800; cv.height = 400;
+    cv.style.width = '800px';
+    cv.style.height = '400px';
+    cv.style.maxWidth = 'none';
+    var sheet = cv.parentNode;
+    if (sheet) {
+      sheet.style.margin = '0';
+      sheet.style.maxWidth = 'none';
+      sheet.style.width = '800px';
+      sheet.style.boxShadow = 'none';
+    }
+    var c = cv.getContext('2d');
+    c.fillStyle = bad.length ? '#ff0000' : '#008000';
+    c.fillRect(0, 0, 800, 200);
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 200, 800, 200);
+
+    // 失败项：每个项一个黑方块，从左到右按序号排列
+    c.fillStyle = '#000000';
+    for (i = 0; i < bad.length; i++) {
+      c.fillRect(30 + bad[i] * 40, 250, 30, 30);
+    }
+    // 总检查数：白底上的灰方块个数，用于核对项数
+    c.fillStyle = '#888888';
+    for (i = 0; i < checks.length; i++) {
+      c.fillRect(30 + i * 40, 320, 30, 30);
+    }
+
+    /* 诊断带：把关键数值编码成一列灰阶像素，方便从截图精确回读 */
+    var d = window.__diag || {};
+    var vals = [d.xrefCount || 0, (d.obj1Off || 0) % 256, (d.pdfLen || 0) % 256,
+                (d.pdfLen || 0) / 256 % 256 | 0, (d.xrefPos || 0) % 256];
+    for (i = 0; i < vals.length; i++) {
+      var g = Math.max(0, Math.min(255, vals[i]));
+      c.fillStyle = 'rgb(' + g + ',' + g + ',' + g + ')';
+      c.fillRect(600 + i * 34, 250, 26, 26);
+    }
+    // 偏移处的前 4 个字符 ASCII，用于确认 "1 0 " 是否对齐
+    var s = String(d.atOff || '');
+    for (i = 0; i < 5; i++) {
+      var code = s.length > i ? s.charCodeAt(i) : 0;
+      c.fillStyle = 'rgb(' + Math.min(255, code) + ',0,0)';
+      c.fillRect(600 + i * 34, 300, 26, 26);
+    }
+
+    var box = document.getElementById('c2');
+    if (box && box.parentNode) { box.parentNode.style.display = 'none'; }
+    var st = $('selftest');
+    if (st) {
+      var parts = [];
+      for (i = 0; i < checks.length; i++) {
+        parts.push((i + 1) + '. ' + (checks[i].ok ? 'PASS' : 'FAIL') + ' ' + checks[i].name);
+      }
+      st.innerHTML = parts.join('\n');
+    }
+  }
+
+  window.__ASM = {
+    Sheet: Sheet,
+    makeCfg: makeCfg,
+    buildPdf: buildPdf,
+    buildSheets: buildSheets,
+    selfTest: selfTest
+  };
+
+  var SELFTEST = (window.location && String(window.location.search).indexOf('selftest') >= 0);
+
+  if (SELFTEST) {
+    /* 自检模式：同步跑完再交给浏览器截图，不依赖 load 之后的定时器 */
+    try { selfTest(); } catch (e) { /* 由 selfTest 内部记录 */ }
+  } else if (document.readyState === 'complete') {
+    init();
+  } else {
+    window.onload = init;
+  }
+})();
+/*==SCRIPT-END==*/
+</script>
+</body>
+</html>

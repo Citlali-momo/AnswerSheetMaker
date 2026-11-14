@@ -1,0 +1,20 @@
+# 生成物与本地环境
+out/
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时文件
+_tmp/
+*.tmp
+*.log
+
+# 浏览器/编辑器
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 本地配置覆盖（保留 config.json 本身）
+config.local.json

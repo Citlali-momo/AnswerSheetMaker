@@ -1,0 +1,28 @@
+{
+  "title": "2026年普通高等学校招生全国统一考试",
+  "subtitle": "数学答题卡",
+  "footer_template": "数学答题卡第{page}面（共{pages}面）",
+  "choice_mode": "bubble",
+  "color_mode": "color",
+  "primary_color": [255, 50, 165],
+  "single_choice_count": 8,
+  "multiple_choice_count": 3,
+  "student_id_digits": 10,
+  "paper_types": ["试卷A", "试卷B"],
+  "question_labels": {
+    "15": "15.（13分）",
+    "16": "16.（15分）",
+    "17": "17.（15分）",
+    "18": "18.（17分）",
+    "19": "19.（17分）"
+  },
+  "continuation_split": {
+    "16": 0.25,
+    "19": 0.5
+  },
+  "images": {},
+  "fonts": {
+    "body": "C:/Windows/Fonts/simsun.ttc",
+    "bold": "C:/Windows/Fonts/simhei.ttf"
+  }
+}
