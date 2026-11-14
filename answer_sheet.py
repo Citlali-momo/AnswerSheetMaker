@@ -49,7 +49,7 @@ import matplotlib.image as mpimg
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
-from matplotlib.font_manager import FontProperties
+from matplotlib.font_manager import FontProperties, fontManager
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, PathPatch, Polygon, Rectangle
 from matplotlib.path import Path as MplPath
@@ -82,6 +82,21 @@ TABLE_GAP = 0.18
 
 BUBBLE_HEIGHT = 2.70                 # 机读涂卡区高度
 NOTE_LINE_FACTOR = 1.55              # 行距系数
+
+# 字体：西文默认 Times New Roman（新罗马），中文正文宋体、标题黑体。
+# 通过 font.family 列表做回退：新罗马没有中文字形，缺的字去后面的字体找。
+DEFAULT_LATIN_FONT = "Times New Roman"
+DEFAULT_CN_FONT = "SimSun"
+DEFAULT_CN_BOLD_FONT = "SimHei"
+
+# 字体名查不到时，用这些文件兜底（主要是防 fontManager 缓存没扫到）
+FONT_FILE_FALLBACK = {
+    "times new roman": ["C:/Windows/Fonts/times.ttf"],
+    "simsun": ["C:/Windows/Fonts/simsun.ttc"],
+    "simhei": ["C:/Windows/Fonts/simhei.ttf"],
+    "microsoft yahei": ["C:/Windows/Fonts/msyh.ttc"],
+    "kaiti": ["C:/Windows/Fonts/simkai.ttf"],
+}
 
 
 def px(x: float) -> float:
@@ -190,9 +205,12 @@ DEFAULTS: Dict[str, Any] = {
     #       "align": "top-right"}
     "images": {},
     # ---- 字体 ----
+    # 西文（数字 / 字母）优先用 latin，中文字形由 body_cn / bold_cn 回退提供。
+    # matplotlib 会把 family 列表当作回退链：一个字体缺的字形去下一个字体找。
     "fonts": {
-        "body": "C:/Windows/Fonts/simsun.ttc",
-        "bold": "C:/Windows/Fonts/simhei.ttf",
+        "latin": "Times New Roman",
+        "body_cn": "SimSun",
+        "bold_cn": "SimHei",
     },
 }
 
@@ -260,8 +278,13 @@ class Config:
         self.images = {str(k): dict(v) for k, v in (d["images"] or {}).items()}
 
         fonts = d.get("fonts") or {}
-        self.font_body = fonts.get("body") or ""
-        self.font_bold = fonts.get("bold") or ""
+        # 新写法：latin=西文字体名，body_cn/bold_cn=中文字体名
+        self.font_latin = str(fonts.get("latin") or DEFAULT_LATIN_FONT)
+        self.font_body_cn = str(fonts.get("body_cn") or fonts.get("body") or DEFAULT_CN_FONT)
+        self.font_bold_cn = str(fonts.get("bold_cn") or fonts.get("bold") or DEFAULT_CN_BOLD_FONT)
+        # 兼容旧写法：直接给字体文件路径
+        legacy = fonts.get("legacy_files")
+        self.font_legacy = dict(legacy) if isinstance(legacy, dict) else {}
 
     # -- 小工具 ---------------------------------------------------------
     def label(self, q: str, default: str = "") -> str:
@@ -312,30 +335,51 @@ class Sheet:
         self._measure_cache: Dict[Tuple[str, float, bool], float] = {}
         self.containers: List[Tuple[str, float, float, float, float]] = []
 
-        self.body_font = self._pick_font(
-            cfg.font_body, ["C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/msyh.ttc"]
-        )
-        self.bold_font = self._pick_font(
-            cfg.font_bold,
-            ["C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/msyhbd.ttc",
-             "C:/Windows/Fonts/simsunb.ttf"],
-        )
+        self.font_families = {
+            False: self._font_chain(cfg.font_latin, cfg.font_body_cn),
+            True: self._font_chain(cfg.font_latin, cfg.font_bold_cn),
+        }
+        self.font_files = {
+            False: self._font_file(cfg.font_body_cn),
+            True: self._font_file(cfg.font_bold_cn),
+        }
+        if self.font_families[False] is None and self.font_files[False] is None:
+            raise FileNotFoundError(
+                "找不到可用的中文字体，请在配置的 fonts 里指定字体名或路径")
 
     # -- 基础设施 -------------------------------------------------------
     @staticmethod
-    def _pick_font(preferred: str, candidates: Sequence[str]) -> str:
-        if preferred and Path(preferred).exists():
-            return preferred
-        for c in candidates:
-            if Path(c).exists():
-                return c
-        raise FileNotFoundError("找不到可用的中文字体，请在配置的 fonts 里指定字体文件路径")
+    def _font_available(name: str) -> bool:
+        target = str(name).strip().lower()
+        if not target:
+            return False
+        return any(str(f.name).lower() == target
+                   for f in fontManager.ttflist)
+
+    @staticmethod
+    def _font_file(name: str) -> Optional[str]:
+        for path in FONT_FILE_FALLBACK.get(str(name).strip().lower(), []):
+            if Path(path).exists():
+                return path
+        return None
+
+    @classmethod
+    def _font_chain(cls, latin: str, chinese: str) -> Optional[List[str]]:
+        """西文在前、中文在后的回退链；名字都查不到时返回 None。"""
+        chain = [n for n in (latin, chinese) if cls._font_available(n)]
+        return chain or None
 
     def font(self, bold: bool, size: float) -> FontProperties:
         key = (bool(bold), round(float(size), 2))
         fp = self._font_cache.get(key)
         if fp is None:
-            fp = FontProperties(fname=self.bold_font if bold else self.body_font, size=size)
+            chain = self.font_families[bool(bold)]
+            if chain:
+                # family 列表即回退链：数字/字母命中 Times，中文落到宋体或黑体
+                fp = FontProperties(family=chain, size=size,
+                                    weight="bold" if bold else "normal")
+            else:
+                fp = FontProperties(fname=self.font_files[bool(bold)], size=size)
             self._font_cache[key] = fp
         return fp
 

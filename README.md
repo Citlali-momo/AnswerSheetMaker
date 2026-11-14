@@ -149,7 +149,11 @@ python answer_sheet.py --image 15=figs\cube.png --image 17=figs\a.png --image-wi
 | `notes` | 注意事项条目（字符串数组） | 与原题一致 |
 | `blank_questions` | 填空题题号 | 12 / 13 / 14 |
 | `hint_text` | 答题区提示语 | 请在各题目的答题区域内作答… |
-| `fonts.body` / `fonts.bold` | 中文字体文件 | 宋体 / 黑体 |
+| `fonts.latin` | 数字与英文字体 | Times New Roman（新罗马） |
+| `fonts.body_cn` | 中文正文字体 | SimSun（宋体） |
+| `fonts.bold_cn` | 中文加粗字体 | SimHei（黑体） |
+
+字体用「西文在前、中文在后」的回退链实现：数字和字母命中新罗马，新罗马没有的汉字自动落到宋体或黑体。想换西文字体，把 `latin` 改成 `Arial`、`Georgia` 等即可，中文部分不受影响。
 
 把当前配置导出成模板（方便对照着改）：
 

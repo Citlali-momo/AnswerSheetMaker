@@ -22,7 +22,8 @@
   },
   "images": {},
   "fonts": {
-    "body": "C:/Windows/Fonts/simsun.ttc",
-    "bold": "C:/Windows/Fonts/simhei.ttf"
+    "latin": "Times New Roman",
+    "body_cn": "SimSun",
+    "bold_cn": "SimHei"
   }
 }
