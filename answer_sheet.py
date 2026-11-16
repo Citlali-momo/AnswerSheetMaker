@@ -199,6 +199,9 @@ DEFAULTS: Dict[str, Any] = {
     "color_mode": "color",            # color=彩色, bw=黑白
     "primary_color": [255, 50, 165],  # 也可写 "#FF32A5" 或 "255,0,0"
     # ---- 版面 ----
+    # layout: standard=标准考试版（含注意事项/填涂样例/试卷类型/缺考标记/条形码）
+    #         daily   =平时考试版（这五块全省，第一列上移，16 题独占中栏）
+    "layout": "standard",
     "continuation_split": {"16": 0.25, "19": 0.5},
     # ---- 插图：键为 15/16/17/18/19（首块区域）或 cont15/cont18/cont19（续答区域）
     #      {"path": "...", "width": 4.6, "height": 3.0, "margin": 0.15,
@@ -274,6 +277,9 @@ class Config:
         self.primary_color = parse_color(d["primary_color"])
 
         self.question_labels = {str(k): str(v) for k, v in d["question_labels"].items()}
+        self.layout = str(d.get("layout") or "standard").lower()
+        if self.layout not in ("standard", "daily"):
+            raise ValueError("layout 只能是 standard 或 daily")
         self.continuation_split = {str(k): float(v) for k, v in d["continuation_split"].items()}
         self.images = {str(k): dict(v) for k, v in (d["images"] or {}).items()}
 
@@ -292,6 +298,16 @@ class Config:
 
     def split(self, q: str, default: float) -> float:
         return float(self.continuation_split.get(q, default))
+
+    @property
+    def is_daily(self) -> bool:
+        """平时考试版：省掉注意事项等五块，第一列上移，16 题独占中栏。"""
+        return self.layout == "daily"
+
+    @property
+    def header_bottom(self) -> float:
+        """头部内容的下沿：平时版只到考生号框，标准版到注意事项框。"""
+        return 23.675 if self.is_daily else (23.20 - 4.40)
 
     def rgb(self) -> Tuple[float, float, float]:
         if self.color_mode == "bw":
@@ -538,16 +554,21 @@ class Sheet:
         for i in range(cfg.student_id_digits):
             self.rect(1.50 + i * 0.65, 23.675, 0.65, 0.65, color=c, lw=0.7)
 
-        # 条形码粘贴区
-        bx, bt, bw, bh = 8.35, 25.50, 4.55, 1.825
-        self.rect(bx, bt - bh, bw, bh, color=c, lw=0.9, ls=(0, (4, 2)))
-        self.text(bx + bw / 2, bt - bh / 2, cfg.barcode_label, 10.5, bold=True, color=c)
-        self.container("条形码区", bx, bt - bh, bw, bh)
+        # 条形码粘贴区（平时考试版不要）
+        if not cfg.is_daily:
+            bx, bt, bw, bh = 8.35, 25.50, 4.55, 1.825
+            self.rect(bx, bt - bh, bw, bh, color=c, lw=0.9, ls=(0, (4, 2)))
+            self.text(bx + bw / 2, bt - bh / 2, cfg.barcode_label, 10.5, bold=True, color=c)
+            self.container("条形码区", bx, bt - bh, bw, bh)
 
         # 顶边 15 个黑色定位码
         for i in range(15):
             self.ax.add_patch(Rectangle((px(0.55 + i * 0.8), py(27.85)), 0.5, 0.25,
                                         facecolor="black", edgecolor="none", zorder=2))
+
+        # 注意事项、填涂样例、试卷类型、缺考标记：平时考试版一并省略
+        if cfg.is_daily:
+            return
 
         self.draw_notes_box()
         self.draw_sample_box()
@@ -875,43 +896,64 @@ class Sheet:
         self.ax.set_aspect("equal")
 
     # -- 页面 -----------------------------------------------------------
+    def page1_layout(self) -> Dict[str, float]:
+        """第一页第一列的纵向排布。
+
+        标准版从注意事项下沿 18.40 起；平时版头部只剩考生号，从 22.88 起，
+        选择题、填空题、15 题因此整体上移 4.48cm，15 题答题区也更高。
+        """
+        col_top = self.cfg.header_bottom - 0.40
+        ch = self.choice_height()
+        choice_top = col_top - 0.70
+        blank_top = choice_top - ch - 0.70
+        essay_top = blank_top - 1.40 - 0.70
+        return {
+            "col_top": col_top,
+            "choice_top": choice_top,
+            "choice_h": ch,
+            "blank_top": blank_top,
+            "essay_top": essay_top,
+            "essay_h": essay_top - 1.20,
+        }
+
     def draw_page1(self) -> None:
         cfg = self.cfg
         self.draw_registration_marks()
         self.draw_footer()
         self.draw_header()
 
+        L = self.page1_layout()
+
         # ---- 第一列 ----
-        self.answer_frame(0.0, 18.4, 0.6, hint_bottom=True)
-        y = 17.70
-        ch = self.choice_height()
-        self.section_box(0.20, y, 12.50, ch, self.choice_heading())
-        self.draw_choice(y, ch)
+        self.answer_frame(0.0, L["col_top"], 0.6, hint_bottom=True)
+        self.section_box(0.20, L["choice_top"], 12.50, L["choice_h"], self.choice_heading())
+        self.draw_choice(L["choice_top"], L["choice_h"])
 
-        y = y - ch - 0.70
-        self.section_box(0.20, y, 12.50, 1.40, "二、填空题")
-        self.draw_blanks(y)
+        self.section_box(0.20, L["blank_top"], 12.50, 1.40, "二、填空题")
+        self.draw_blanks(L["blank_top"])
 
-        y = y - 1.40 - 0.70
-        eb_bottom = 1.20
-        eb_h = y - eb_bottom
-        self.section_box(0.20, y, 12.50, eb_h, "三、解答题")
-        r15 = Region(0.20, y, 12.50, eb_h)
-        self.text(1.50, y - 0.50, cfg.label("15"), 11)
+        self.section_box(0.20, L["essay_top"], 12.50, L["essay_h"], "三、解答题")
+        r15 = Region(0.20, L["essay_top"], 12.50, L["essay_h"])
+        self.text(1.50, L["essay_top"] - 0.50, cfg.label("15"), 11)
         self.maybe_image("15", r15)
 
-        # ---- 第二列 ----
+        # ---- 第二列：标准版「续15题 + 16题」上下分栏；平时版 16 题独占整栏 ----
         self.answer_frame(13.2, 27.4, 0.6, hint_bottom=True, hint_top=True)
         self.inner_box(13.2)
         box_top, box_h = 26.80, 25.60
-        split = cfg.split("16", 0.25)
-        div_y = box_top - box_h * split
-        self.line([(13.40, div_y), (25.90, div_y)], color="black", lw=0.8)
-        self.text(14.70, box_top - 0.50, self.cont_label("15"), 11,
-                  bold=True, color=self.primary)
-        self.text(14.70, div_y - 0.50, cfg.label("16"), 11)
-        self.maybe_image("cont15", Region(13.40, box_top, 12.50, box_h * split))
-        self.maybe_image("16", Region(13.40, div_y, 12.50, box_h * (1 - split)))
+
+        if cfg.is_daily:
+            self.text(14.70, box_top - 0.50, cfg.label("16"), 11)
+            self.maybe_image("16", Region(13.40, box_top, 12.50, box_h))
+        else:
+            split = cfg.split("16", 0.25)
+            div_y = box_top - box_h * split
+            self.line([(13.40, div_y), (25.90, div_y)], color="black", lw=0.8)
+            self.text(14.70, box_top - 0.50, self.cont_label("15"), 11,
+                      bold=True, color=self.primary)
+            self.text(14.70, div_y - 0.50, cfg.label("16"), 11)
+            self.maybe_image("cont15", Region(13.40, box_top, 12.50, box_h * split))
+            self.maybe_image("16", Region(13.40, div_y, 12.50, box_h * (1 - split)))
 
         # ---- 第三列 ----
         self.answer_frame(26.4, 27.4, 0.6, hint_bottom=True, hint_top=True)
@@ -1059,6 +1101,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("-o", "--out", help="输出 PDF 路径（默认 out/答题卡.pdf）")
     ap.add_argument("--title", help="大标题，例如：2026年某某中学高三模拟考试")
     ap.add_argument("--subtitle", help="副标题，例如：数学答题卡")
+    ap.add_argument("--layout", choices=["standard", "daily"],
+                    help="standard=标准考试版（含注意事项/条形码等），daily=平时考试版（省掉这五块）")
     ap.add_argument("--choice-mode", choices=["bubble", "table"],
                     help="bubble=机读涂卡，table=填写答案表格")
     ap.add_argument("--color-mode", choices=["color", "bw"], help="彩色 / 黑白")
@@ -1093,6 +1137,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         data["title"] = args.title
     if args.subtitle:
         data["subtitle"] = args.subtitle
+    if args.layout:
+        data["layout"] = args.layout
     if args.choice_mode:
         data["choice_mode"] = args.choice_mode
     if args.color_mode:

@@ -83,7 +83,17 @@
   </fieldset>
 
   <fieldset>
-    <legend>二、选择题方式</legend>
+    <legend>二、答题卡版本</legend>
+    <label><input type="radio" name="layout" value="standard" id="lStandard" checked> 标准考试版答题卡</label>
+    <label><input type="radio" name="layout" value="daily" id="lDaily"> 平时考试版答题卡</label>
+    <div class="hint">
+      标准版含注意事项、填涂样例、试卷类型、缺考标记、条形码粘贴区。<br>
+      平时版把上面五项一起去掉，选择题、填空题、15 题整体上移，16 题独占第一页中间一栏，「续 15 题」不再分栏。
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>三、选择题方式</legend>
     <label><input type="radio" name="mode" value="bubble" id="mBubble" checked> 机读涂卡（A/B/C/D 涂点）</label>
     <label><input type="radio" name="mode" value="table" id="mTable"> 填写答案（表格）</label>
     <div class="row">
@@ -94,7 +104,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>三、配色</legend>
+    <legend>四、配色</legend>
     <label class="inline"><input type="radio" name="color" value="color" id="cColor" checked> 彩色</label>
     <label class="inline"><input type="radio" name="color" value="bw" id="cBw"> 黑白</label>
     <div class="row">
@@ -108,19 +118,19 @@
   </fieldset>
 
   <fieldset>
-    <legend>四、解答题分值</legend>
+    <legend>五、解答题分值</legend>
     <div id="scoreRow"></div>
     <div class="hint">用于题号后面的括号，例如「15.（13分）」。</div>
   </fieldset>
 
   <fieldset>
-    <legend>五、答题区插图</legend>
+    <legend>六、答题区插图</legend>
     <div class="hint">图片贴在答题区域右上角，自动等比缩放，不会压出边框。宽度留空则用默认 4.8cm。</div>
     <div id="imgRows"></div>
   </fieldset>
 
   <fieldset>
-    <legend>六、输出</legend>
+    <legend>七、输出</legend>
     <label>清晰度
       <select id="selDpi">
         <option value="150">150 dpi（最快，很老的电脑用）</option>
@@ -163,6 +173,14 @@
   var BUBBLE_H = 2.70;
   var T_PAD = 0.12, T_GROUP = 0.40, T_HDR = 0.48, T_ANS = 0.92, T_GAP = 0.18;
   var NOTE_LINE = 1.55;
+  var BLANK_H = 1.40;          // 填空题条带高度
+  var NOTE_TOP = 23.20, NOTE_H = 4.40;   // 注意事项框
+  var ES_COL_TOP = 1.20;       // 第一列答题区下沿
+
+  /* 两种版式：
+   *   standard —— 标准考试版，含注意事项、填涂样例、试卷类型、缺考标记、条形码
+   *   daily    —— 平时考试版，这五块全部省略，第一列整体上移，16 题独占中栏 */
+  function isDailyCfg(cfg) { return !!cfg && cfg.layout === 'daily'; }
 
   function X(x) { return PAGE.LM + x; }          // TikZ x -> 页面 x
   function Y(y) { return PAGE.H - (PAGE.BM + y); } // TikZ y -> 画布 y
@@ -414,8 +432,14 @@
     this.text(cx, 26.30, cfg.subtitle, ssize, true, this.black);
   };
 
+  /* 头部内容的下沿：平时版只到考生号框，标准版到注意事项框 */
+  Sheet.prototype.headerBottomY = function () {
+    return isDailyCfg(this.cfg) ? 23.675 : (NOTE_TOP - NOTE_H);
+  };
+
   Sheet.prototype.drawHeader = function () {
     var cfg = this.cfg, c = this.primary, i;
+    var daily = isDailyCfg(cfg);
 
     this.drawTitles();
 
@@ -427,12 +451,18 @@
       this.rect(1.50 + i * 0.65, 23.675, 0.65, 0.65, c, 0.7);
     }
 
-    this.dashRect(8.35, 25.50 - 1.825, 4.55, 1.825, c, 0.9, 0.18, 0.12);
-    this.text(8.35 + 4.55 / 2, 25.50 - 1.825 / 2, cfg.barcodeLabel, 10.5, true, c);
+    /* 条形码粘贴区：平时版不要 */
+    if (!daily) {
+      this.dashRect(8.35, 25.50 - 1.825, 4.55, 1.825, c, 0.9, 0.18, 0.12);
+      this.text(8.35 + 4.55 / 2, 25.50 - 1.825 / 2, cfg.barcodeLabel, 10.5, true, c);
+    }
 
     for (i = 0; i < 15; i++) {
       this.rect(0.55 + i * 0.8, 27.85, 0.5, 0.25, null, 0, this.black);
     }
+
+    /* 注意事项、填涂样例、试卷类型、缺考标记：平时版一并省略 */
+    if (daily) { return; }
 
     this.drawNotes();
     this.drawSample();
@@ -460,7 +490,7 @@
 
   Sheet.prototype.drawNotes = function () {
     var c = this.primary;
-    var top = 23.20, h = 4.40, w = 8.00;
+    var top = NOTE_TOP, h = NOTE_H, w = 8.00;
     this.rect(0, top - h, w, h, c, 0.8);
 
     var sizes = [8, 7.8, 7.6, 7.4, 7.2, 7.0, 6.8, 6.6, 6.4, 6.2];
@@ -748,42 +778,64 @@
     this.textAbs(PAGE.W / 2, 0.42, txt, 10.5, true, this.primary);
   };
 
+  /* 第一页第一列的纵向排布
+   * 标准版从注意事项下沿 18.40 起；平时版头部只剩考生号，从 23.28 起，
+   * 选择题、填空题、15 题因此整体上移，15 题拿到的答题区也更高。
+   */
+  Sheet.prototype.page1Layout = function () {
+    var colTop = this.headerBottomY() - 0.40;
+    var ch = this.choiceHeight();
+    var choiceTop = colTop - 0.70;
+    var blankTop = choiceTop - ch - 0.70;
+    var essayTop = blankTop - BLANK_H - 0.70;
+    return {
+      colTop: colTop,
+      choiceTop: choiceTop,
+      choiceH: ch,
+      blankTop: blankTop,
+      essayTop: essayTop,
+      essayH: essayTop - ES_COL_TOP,
+      cont15: !isDailyCfg(this.cfg)
+    };
+  };
+
   Sheet.prototype.drawPage1 = function () {
     var cfg = this.cfg;
+    var L = this.page1Layout();
 
     this.drawRegistration();
     this.drawFooter();
     this.drawHeader();
 
     // 第一列
-    this.answerFrame(0, 18.4, 0.6, true, false);
-    var y = 17.70;
-    var ch = this.choiceHeight();
-    this.sectionBox(0.20, y, 12.50, ch, this.choiceHeading());
-    this.drawChoice(y, ch);
+    this.answerFrame(0, L.colTop, 0.6, true, false);
+    this.sectionBox(0.20, L.choiceTop, 12.50, L.choiceH, this.choiceHeading());
+    this.drawChoice(L.choiceTop, L.choiceH);
 
-    y = y - ch - 0.70;
-    this.sectionBox(0.20, y, 12.50, 1.40, '二、填空题');
-    this.drawBlanks(y);
+    this.sectionBox(0.20, L.blankTop, 12.50, BLANK_H, '二、填空题');
+    this.drawBlanks(L.blankTop);
 
-    y = y - 1.40 - 0.70;
-    var ebBottom = 1.20;
-    var ebH = y - ebBottom;
-    this.sectionBox(0.20, y, 12.50, ebH, '三、解答题');
-    this.text(1.50, y - 0.50, cfg.labels['15'], 11, false, this.black);
-    this.maybeImage('15', { x: 0.20, top: y, w: 12.50, h: ebH });
+    this.sectionBox(0.20, L.essayTop, 12.50, L.essayH, '三、解答题');
+    this.text(1.50, L.essayTop - 0.50, cfg.labels['15'], 11, false, this.black);
+    this.maybeImage('15', { x: 0.20, top: L.essayTop, w: 12.50, h: L.essayH });
 
-    // 第二列
+    // 第二列：标准版「续15题 + 16题」上下分栏；平时版 16 题独占整栏
     this.answerFrame(13.2, 27.4, 0.6, true, true);
     this.innerBox(13.2);
     var boxTop = 26.80, boxH = 25.60;
-    var split16 = cfg.split['16'];
-    var divY = boxTop - boxH * split16;
-    this.line([[13.40, divY], [25.90, divY]], this.black, 0.8);
-    this.text(14.70, boxTop - 0.50, '（续15题）', 11, true, this.primary);
-    this.text(14.70, divY - 0.50, cfg.labels['16'], 11, false, this.black);
-    this.maybeImage('cont15', { x: 13.40, top: boxTop, w: 12.50, h: boxH * split16 });
-    this.maybeImage('16', { x: 13.40, top: divY, w: 12.50, h: boxH * (1 - split16) });
+
+    if (L.cont15) {
+      var split16 = cfg.split['16'];
+      var divY = boxTop - boxH * split16;
+      this.line([[13.40, divY], [25.90, divY]], this.black, 0.8);
+      this.text(14.70, boxTop - 0.50, '（续15题）', 11, true, this.primary);
+      this.text(14.70, divY - 0.50, cfg.labels['16'], 11, false, this.black);
+      this.maybeImage('cont15', { x: 13.40, top: boxTop, w: 12.50, h: boxH * split16 });
+      this.maybeImage('16', { x: 13.40, top: divY, w: 12.50, h: boxH * (1 - split16) });
+    } else {
+      this.text(14.70, boxTop - 0.50, cfg.labels['16'], 11, false, this.black);
+      this.maybeImage('16', { x: 13.40, top: boxTop, w: 12.50, h: boxH });
+    }
 
     // 第三列
     this.answerFrame(26.4, 27.4, 0.6, true, true);
@@ -852,6 +904,7 @@
       title: ui.title,
       subtitle: ui.subtitle,
       footer: ui.footer,
+      layout: ui.layout || 'standard',
       mode: ui.mode,
       single: ui.single,
       multi: ui.multi,
@@ -1027,6 +1080,7 @@
     title: '2026年普通高等学校招生全国统一考试',
     subtitle: '数学答题卡',
     footer: '数学答题卡第{page}面（共{pages}面）',
+    layout: 'standard',
     mode: 'bubble',
     single: 8,
     multi: 3,
@@ -1159,6 +1213,7 @@
     ui.title = $('tTitle').value;
     ui.subtitle = $('tSubtitle').value;
     ui.footer = $('tFooter').value;
+    ui.layout = $('lDaily').checked ? 'daily' : 'standard';
     ui.mode = $('mTable').checked ? 'table' : 'bubble';
     ui.single = Math.max(0, parseInt($('nSingle').value, 10) || 0);
     ui.multi = Math.max(0, parseInt($('nMulti').value, 10) || 0);
@@ -1215,6 +1270,7 @@
     try {
       var data = {
         title: ui.title, subtitle: ui.subtitle, footer: ui.footer,
+        layout: ui.layout,
         mode: ui.mode, single: ui.single, multi: ui.multi,
         colorMode: ui.colorMode, primary: $('tPrimary').value,
         scores: ui.scores
@@ -1231,6 +1287,7 @@
       if (d.title) { $('tTitle').value = d.title; }
       if (d.subtitle) { $('tSubtitle').value = d.subtitle; }
       if (d.footer) { $('tFooter').value = d.footer; }
+      if (d.layout === 'daily') { $('lDaily').checked = true; } else { $('lStandard').checked = true; }
       if (d.mode === 'table') { $('mTable').checked = true; } else { $('mBubble').checked = true; }
       if (typeof d.single === 'number') { $('nSingle').value = d.single; }
       if (typeof d.multi === 'number') { $('nMulti').value = d.multi; }
@@ -1315,6 +1372,7 @@
     $('tTitle').value = '2026年普通高等学校招生全国统一考试';
     $('tSubtitle').value = '数学答题卡';
     $('tFooter').value = '数学答题卡第{page}面（共{pages}面）';
+    $('lStandard').checked = true;
     $('mBubble').checked = true;
     $('nSingle').value = '8';
     $('nMulti').value = '3';
@@ -1348,6 +1406,8 @@
       $(ids[i]).onchange = schedule;
       $(ids[i]).onkeyup = schedule;
     }
+    $('lStandard').onclick = schedule;
+    $('lDaily').onclick = schedule;
     $('mBubble').onclick = schedule;
     $('mTable').onclick = schedule;
     $('cColor').onclick = schedule;
@@ -1359,6 +1419,7 @@
     $('btnReset').onclick = resetAll;
 
     var qs = String(window.location.search || '');
+    if (qs.indexOf('layout=daily') >= 0) { $('lDaily').checked = true; ui.layout = 'daily'; }
     if (qs.indexOf('render=') >= 0) {
       renderMode(parseInt(qs.substring(qs.indexOf('render=') + 7), 10) || 1);
       return;
@@ -1366,10 +1427,11 @@
     preview();
   }
 
-  /* 仅供自动检查使用：?render=1/2 单页放大，3=表格黑白，4=带插图 */
+  /* 仅供自动检查使用：?render=1/2 单页放大，3=表格黑白，4=带插图，5=平时版 */
   function renderMode(code) {
     var pageNo = (code === 2) ? 2 : 1;
     if (code === 3) { ui.mode = 'table'; ui.colorMode = 'bw'; }
+    if (code === 5) { ui.layout = 'daily'; }
     if (code === 4) {
       ui.mode = 'table';
       var img = new Image();
@@ -1463,6 +1525,81 @@
 
       // 4 涂卡模式高度固定
       chk('bubble-height', Math.abs(s1.choiceHeight() - 2.70) < 0.001);
+
+      // 4b 两种版式：标准考试版 / 平时考试版
+      var cfgD = makeCfg(ui);
+      cfgD.layout = 'daily';
+      var sD = new Sheet(cfgD, 1, 20);
+      var Ls = s1.page1Layout(), Ld = sD.page1Layout();
+
+      chk('layout-standard-top', Math.abs(Ls.colTop - 18.40) < 0.01);
+      chk('layout-daily-top', Ld.colTop > Ls.colTop + 4.0);
+      chk('layout-daily-choice-up', Ld.choiceTop > Ls.choiceTop + 4.0);
+      chk('layout-daily-blank-up', Ld.blankTop > Ls.blankTop + 4.0);
+      chk('layout-daily-essay-taller', Ld.essayH > Ls.essayH + 4.0);
+      chk('layout-daily-no-cont15', Ld.cont15 === false && Ls.cont15 === true);
+      chk('layout-daily-keeps-name', sD.headerBottomY() > 23.0 &&
+          sD.headerBottomY() > s1.headerBottomY() + 4.0);
+
+      // 画出来比对：条形码那块在平时版应当一片空白
+      // 注意：这里的 y 是 TikZ 坐标，画到画布上还要减去页边距 BM
+      //       主题色是粉色（R=255），所以要按「非白」判断，不能只看红通道
+      function inkInRect(cv, x0, y0, x1, y1) {
+        var sc = cv.width / PAGE.W;
+        var pa = Math.round((PAGE.LM + x0) * sc), pb = Math.round((PAGE.LM + x1) * sc);
+        var pc = Math.round((PAGE.H - PAGE.BM - y1) * sc);
+        var pd = Math.round((PAGE.H - PAGE.BM - y0) * sc);
+        var dd = cv.getContext('2d').getImageData(pa, pc, pb - pa, pd - pc).data;
+        var cnt = 0, j;
+        for (j = 0; j < dd.length; j += 4) {
+          if (dd[j] < 250 || dd[j + 1] < 250 || dd[j + 2] < 250) { cnt++; }
+        }
+        return cnt;
+      }
+
+      var pS = new Sheet(cfg, 1, 30); pS.draw();
+      var pD = new Sheet(cfgD, 1, 30); pD.draw();
+
+      chk('layout-daily-no-barcode',
+        inkInRect(pS.canvas, 8.5, 23.9, 12.8, 25.3) > 20 &&
+        inkInRect(pD.canvas, 8.5, 23.9, 12.8, 25.3) === 0);
+      chk('layout-daily-less-ink', inkRatio(pD.canvas) < inkRatio(pS.canvas) - 0.002);
+
+      // 「续15题」那一刀：标准版在中栏 y≈20.40 画一条长分隔线，平时版不画
+      function hasCont15Divider(c) {
+        var rec = [];
+        var origLine = Sheet.prototype.line;
+        Sheet.prototype.line = function (pts) { rec.push(pts); return origLine.apply(this, arguments); };
+        var sh = new Sheet(c, 1, 12); sh.draw();
+        Sheet.prototype.line = origLine;
+        for (var i = 0; i < rec.length; i++) {
+          var p = rec[i];
+          if (p.length === 2 &&
+              Math.abs(p[0][1] - p[1][1]) < 0.01 &&
+              Math.abs(p[0][1] - 20.40) < 0.05 &&
+              Math.abs(p[1][0] - p[0][0]) > 10) { return true; }
+        }
+        return false;
+      }
+      chk('layout-daily-no-cont15-divider',
+        hasCont15Divider(cfg) === true && hasCont15Divider(cfgD) === false);
+
+      // 平时版真的不调用那四块绘制
+      var hit = {}, saved = {};
+      var blkNames = ['drawNotes', 'drawSample', 'drawPaperType', 'drawAbsent'];
+      var bi;
+      for (bi = 0; bi < blkNames.length; bi++) {
+        saved[blkNames[bi]] = Sheet.prototype[blkNames[bi]];
+        Sheet.prototype[blkNames[bi]] = (function (nm, fn) {
+          return function () { hit[nm] = (hit[nm] || 0) + 1; return fn.apply(this, arguments); };
+        })(blkNames[bi], saved[blkNames[bi]]);
+      }
+      var pT = new Sheet(cfgD, 1, 12); pT.draw();
+      for (bi = 0; bi < blkNames.length; bi++) {
+        Sheet.prototype[blkNames[bi]] = saved[blkNames[bi]];
+      }
+      chk('layout-daily-skips-blocks',
+        !hit.drawNotes && !hit.drawSample && !hit.drawPaperType && !hit.drawAbsent);
 
       // 5 页面有内容
       var p1 = new Sheet(cfg, 1, 12); p1.draw();

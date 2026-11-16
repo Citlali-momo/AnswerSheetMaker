@@ -20,6 +20,7 @@
     "16": 0.25,
     "19": 0.5
   },
+  "layout": "standard",
   "images": {},
   "fonts": {
     "latin": "Times New Roman",
